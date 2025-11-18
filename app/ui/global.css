@@ -444,9 +444,9 @@ input[type='number']::-webkit-outer-spin-button {
 }
 
 .nav-overlay__link.is-active::after {
-  width: 60%;
-  opacity: 1;
-  transform: rotate(2deg);
+  width: 0;
+  opacity: 0;
+  transform: rotate(0deg);
 }
 
 .tool-card {
@@ -537,6 +537,10 @@ input[type='number']::-webkit-outer-spin-button {
 
 .nav-link:hover::after {
   transform: scaleX(1);
+}
+
+.nav-link--active {
+  color: #d2ff00;
 }
 
 .nav-shell {

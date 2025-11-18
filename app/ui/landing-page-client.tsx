@@ -5,8 +5,16 @@ import { useEffect, useRef, useState } from 'react';
 import { BoltIcon } from '@heroicons/react/24/outline';
 import MoofPlannerLogo from '@/app/ui/moofplanner-logo';
 import { spaceGrotesk, plusJakarta } from '@/app/ui/fonts';
+import { Metadata } from 'next';
+
+
+export const metadata: Metadata = {
+  title: 'MoofPlanner',
+  description: 'Modern workforce planning platform to plan smarter and work better.',
+};
 
 const navLinks = [
+  { label: 'Home', href: '#hero' },
   { label: 'Price', href: '#pricing' },
   { label: 'About', href: '#about' },
   { label: 'Contact', href: '#contact' },
@@ -99,6 +107,7 @@ const contactChannels = [
 ];
 
 const socialLinks = ['LinkedIn', 'YouTube', 'Instagram', 'Discord'];
+const overlayLinks = navLinks;
 
 export default function LandingPageClient() {
   const revealRefs = useRef<HTMLElement[]>([]);
@@ -106,6 +115,7 @@ export default function LandingPageClient() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [navPinned, setNavPinned] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState<string>('Home');
 
   useEffect(() => {
     let rafId: number | null = null;
@@ -207,13 +217,14 @@ export default function LandingPageClient() {
   return (
     <div className="bg-[#0C1208] text-white">
       <section
+        id="hero"
         className="relative min-h-screen overflow-hidden neon-hero"
         style={{ backgroundPositionY: `${scrollProgress * 220}px` }}
       >
         <div className="hero-noise" />
         <div className="hero-rings" />
         <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-5 pb-16 pt-24 sm:px-8">
-          <nav className={`nav-shell ${navPinned ? 'nav-shell--pinned' : 'nav-shell--top'}`}>
+          <nav className={`nav-shell ${menuOpen ? 'nav-shell--overlay' : navPinned ? 'nav-shell--pinned' : 'nav-shell--top'}`}>
             <MoofPlannerLogo compact className="text-white" />
             <div className="flex gap-3">
               <Link href="/login" className={`${plusJakarta.className} store-pill`}>Aanmelden</Link>
@@ -232,12 +243,15 @@ export default function LandingPageClient() {
           {menuOpen && (
             <div className="nav-overlay">
               <div className={`${spaceGrotesk.className} nav-overlay__links`}>
-                {navLinks.map((link, index) => (
+                {overlayLinks.map((link) => (
                   <Link
                     key={link.label}
                     href={link.href}
-                    className={`nav-overlay__link ${index === 0 ? 'is-active' : ''}`}
-                    onClick={() => setMenuOpen(false)}
+                    className={`nav-overlay__link ${link.label === activeNav ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setActiveNav(link.label);
+                      setMenuOpen(false);
+                    }}
                   >
                     {link.label}
                   </Link>
