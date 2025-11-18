@@ -16,3 +16,63 @@ input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-floating {
+  animation: float 10s ease-in-out infinite;
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+}
+
+@keyframes revealUp {
+  0% {
+    opacity: 0;
+    transform: translateY(40px) scale(0.98);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.01);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0px) scale(1);
+  }
+}
+
+.reveal-on-scroll.is-visible {
+  animation: revealUp 1s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+}
+
+.tilt-card {
+  transition: transform 0.45s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.45s;
+  transform-style: preserve-3d;
+}
+
+.tilt-card:hover {
+  transform: perspective(1000px) rotateX(4deg) rotateY(-4deg) translateY(-6px);
+  box-shadow: 0 35px 90px rgba(30, 136, 229, 0.35);
+}

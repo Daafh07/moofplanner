@@ -102,6 +102,12 @@ async function seedRevenue() {
 }
 
 export async function GET() {
+  if (
+    process.env.NODE_ENV !== 'development' &&
+    process.env.ALLOW_SEED !== 'true'
+  ) {
+    return Response.json({ error: 'Not found' }, { status: 404 });
+  }
   try {
     const result = await sql.begin((sql) => [
       seedUsers(),

@@ -1,13 +1,28 @@
-import { CalendarDaysIcon } from '@heroicons/react/24/outline';
-import { lusitana } from '@/app/ui/fonts';
+import { inter } from '@/app/ui/fonts';
+import clsx from 'clsx';
 
-export default function MoofPlannerLogo() {
+type MoofPlannerLogoProps = {
+  compact?: boolean;
+  className?: string;
+};
+
+export default function MoofPlannerLogo({
+  compact = false,
+  className,
+}: MoofPlannerLogoProps) {
+  const textClass = compact
+    ? 'text-2xl md:text-3xl'
+    : 'text-[36px] md:text-[40px]';
+
   return (
     <div
-      className={`${lusitana.className} flex flex-row items-center leading-none text-white`}
+      className={clsx(
+        `${inter.className}`,
+        'flex items-center justify-center leading-none',
+        className ?? 'text-white',
+      )}
     >
-      <CalendarDaysIcon className="h-12 w-12" />
-      <p className="text-[44px]">MoofPlanner</p>
+      <p className={textClass}>MoofPlanner</p>
     </div>
   );
 }
