@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import postgres from 'postgres';
-import { signIn } from '@/auth';
+import { auth, signIn } from '@/auth';
 import { AuthError } from 'next-auth';
  
 const sql = (() => {
@@ -24,7 +24,16 @@ const FormSchema = z.object({
  
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
 
+async function ensureAuthenticated() {
+  const session = await auth();
+  if (!session?.user) {
+    throw new Error('Unauthorized');
+  }
+  return session;
+}
+
 export async function createInvoice(formData: FormData) {
+  await ensureAuthenticated();
   const { customerId, amount, status } = CreateInvoice.parse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
@@ -55,6 +64,7 @@ const UpdateInvoice = FormSchema.omit({ id: true, date: true });
  
  
 export async function updateInvoice(id: string, formData: FormData) {
+  await ensureAuthenticated();
   const { customerId, amount, status } = UpdateInvoice.parse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
@@ -82,13 +92,21 @@ export async function updateInvoice(id: string, formData: FormData) {
 // wrapper for form action: accepts FormData from the client form
 export async function updateInvoiceAction(formData: FormData) {
   const id = String(formData.get('id') ?? '');
+  if (!id) {
+    throw new Error('Missing invoice id');
+  }
   return updateInvoice(id, formData);
 }
 
 export async function deleteInvoice(id: string) {
-  throw new Error('Failed to Delete Invoice');
- 
-  await sql`DELETE FROM invoices WHERE id = ${id}`;
+  await ensureAuthenticated();
+  try {
+    await sql`DELETE FROM invoices WHERE id = ${id}`;
+  } catch (error) {
+    console.error(error);
+    return { message: 'Database Error: Failed to Delete Invoice.' };
+  }
+
   revalidatePath('/dashboard/invoices');
 }
 
