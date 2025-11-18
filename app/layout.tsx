@@ -1,7 +1,7 @@
 import '@/app/ui/global.css';
-import { inter } from '@/app/ui/fonts';
+import { inter, plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import { Metadata } from 'next';
- 
+
 export const metadata: Metadata = {
   title: {
     template: '%s | MoofPlanner Dashboard',
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   },
   description: 'The official MoofPlanner Dashboard, create, manage and analyze your business with ease.',
 };
- 
+
 export default function RootLayout({
   children,
 }: {
@@ -17,7 +17,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>{children}</body>
+      <body
+        className={`${inter.variable} ${spaceGrotesk.variable} ${plusJakarta.variable} font-sans antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

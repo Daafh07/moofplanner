@@ -1,4 +1,4 @@
-import { inter } from '@/app/ui/fonts';
+import { spaceGrotesk } from '@/app/ui/fonts';
 import clsx from 'clsx';
 
 type MoofPlannerLogoProps = {
@@ -11,13 +11,13 @@ export default function MoofPlannerLogo({
   className,
 }: MoofPlannerLogoProps) {
   const textClass = compact
-    ? 'text-2xl md:text-3xl'
-    : 'text-[36px] md:text-[40px]';
+    ? 'text-2xl md:text-3xl font-semibold'
+    : 'text-[36px] md:text-[40px] font-semibold';
 
   return (
     <div
       className={clsx(
-        `${inter.className}`,
+        `${spaceGrotesk.className}`,
         'flex items-center justify-center leading-none',
         className ?? 'text-white',
       )}

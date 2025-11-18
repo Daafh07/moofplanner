@@ -1,9 +1,18 @@
-import { Inter } from 'next/font/google';
-import { Lusitana } from 'next/font/google';
+import { Inter, Space_Grotesk, Plus_Jakarta_Sans } from 'next/font/google';
 
-export const lusitana = Lusitana({ 
-    weight: ['400', '700'],
-    subsets: ['latin'],
+export const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
 });
 
-export const inter = Inter({ subsets: ['latin'] }); 
+export const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-space-grotesk',
+});
+
+export const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-plus-jakarta',
+});
