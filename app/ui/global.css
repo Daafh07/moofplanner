@@ -13,6 +13,12 @@
   --color-mist-grey: #A4AD8C;
   --color-slate-blue: #F5F7E2;
   --color-neon-lime: #D2FF00;
+  --cursor-core-default: #f4f7e0;
+  --cursor-core-interactive: #d2ff00;
+  --cursor-core-active: #0c1208;
+  --cursor-glow-default: rgba(210, 255, 0, 0.25);
+  --cursor-glow-interactive: rgba(210, 255, 0, 0.55);
+  --cursor-glow-active: rgba(210, 255, 0, 0.8);
 }
 
 @layer base {
@@ -22,6 +28,14 @@
     color: var(--color-white);
     position: relative;
     cursor: none;
+    --cursor-core-color: var(--cursor-core-default);
+    --cursor-glow-color: var(--cursor-glow-default);
+  }
+
+  body *,
+  body *::before,
+  body *::after {
+    cursor: inherit;
   }
 
   h1,
@@ -57,9 +71,10 @@ body::after {
   height: 360px;
   border-radius: 50%;
   transform: translate3d(calc(var(--cursor-x, 50vw) - 180px), calc(var(--cursor-y, 50vh) - 180px), 0);
-  background: radial-gradient(circle, rgba(210, 255, 0, 0.25), transparent 70%);
+  background: radial-gradient(circle, var(--cursor-glow-color, var(--cursor-glow-default)), transparent 70%);
   filter: blur(40px);
   opacity: calc(var(--cursor-visible, 1) * 0.45);
+  transition: background 0.2s ease;
 }
 
 body::before {
@@ -67,9 +82,20 @@ body::before {
   height: 18px;
   border-radius: 50%;
   transform: translate3d(calc(var(--cursor-x, 50vw) - 9px), calc(var(--cursor-y, 50vh) - 9px), 0);
-  background: #f4f7e0;
-  box-shadow: 0 0 30px rgba(210, 255, 0, 0.7);
+  background: var(--cursor-core-color, var(--cursor-core-default));
+  box-shadow: 0 0 30px var(--cursor-glow-color, var(--cursor-glow-default));
   mix-blend-mode: screen;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+body[data-cursor-state='interactive'] {
+  --cursor-core-color: var(--cursor-core-interactive);
+  --cursor-glow-color: var(--cursor-glow-interactive);
+}
+
+body[data-cursor-state='active'] {
+  --cursor-core-color: var(--cursor-core-active);
+  --cursor-glow-color: var(--cursor-glow-active);
 }
 
 @media (hover: none), (pointer: coarse) {

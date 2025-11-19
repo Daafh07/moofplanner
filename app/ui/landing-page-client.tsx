@@ -17,37 +17,47 @@ const navLinks = [
   { label: 'Home', href: '#hero' },
   { label: 'Price', href: '#pricing' },
   { label: 'About', href: '#about' },
-  { label: 'Contact', href: '#contact' },
   { label: 'Account', href: '#account' },
+  { label: 'Contact', href: '#contact' },
 ];
 
 const heroMetrics = [
   { label: 'Companies trusting us', value: '10+' },
   { label: 'Hours saved', value: '200+' },
-  { label: 'Reduce planning mistakes by', value: '60%' },
+  { label: 'Planning mistakes reduced', value: '60%' },
 ];
 
 const manifestoText = [
   'Redefining workforce calm.',
   'No messy schedules.',
   'Clarity for every shift.',
-  'Clocking system, no stress.',
+  'Clock your hours, zero stress.',
 ];
 
 const pricePlans = [
   {
     name: 'Basic Plan',
     price: '€49',
-    cadence: 'Company / Month',
-    features: ['Planning system', 'Schedule availability', 'Live cost estimate', 'Up to 20 employees'],
+    cadence: 'Company / month',
+    features: [
+      'Planning system',
+      'Availability boards',
+      'Live cost estimate',
+      'Up to 20 employees',
+    ],
     badge: 'Most adopted',
     accent: '#D2FF00',
   },
   {
     name: 'Next Step',
     price: '€89',
-    cadence: 'per gebruiker / maand',
-    features: ['Scheduling together', 'Multiple schedules', 'Clocking system', 'Up to 75 employees'],
+    cadence: 'Per user / month',
+    features: [
+      'Team scheduling',
+      'Multiple schedule views',
+      'Integrated time clock',
+      'Up to 75 employees',
+    ],
     badge: 'Ready for growth',
     accent: '#B5FF5A',
   },
@@ -63,45 +73,45 @@ const pricePlans = [
 
 const aboutPillars = [
   {
-    title: 'Automate & Humanize',
-    copy: 'MoofPlanner combines automation with human-centred flows. Managers feel supported, not replaced.',
+    title: 'Automate & humanize',
+    copy: 'MoofPlanner combines automation with human-centred flows so managers feel supported, not replaced.',
   },
   {
-    title: 'Data-driven Insights',
-    copy: 'Real-time dashboards show labor costs, contract hours, and open shifts before they become an issue.',
+    title: 'Data-driven insight',
+    copy: 'Real-time dashboards surface labor costs, contract hours, and open shifts before they become issues.',
   },
   {
     title: 'Moof DNA',
-    copy: 'Built as a modern solution for today’s workforce challenges, MoofPlanner embodies our commitment to simplicity and efficiency.',
+    copy: 'Built for modern workforce challenges while keeping the interface simple and efficient.',
   },
 ];
 
 const accountMoments = [
   {
     heading: 'Account cockpit',
-    detail: 'You can set roles, locations, and access rights visually. Managers only see what belongs to their crew.',
+    detail: 'Set roles, locations, and access rights visually. Managers only see what belongs to their crew.',
   },
   {
     heading: 'Employee views',
-    detail: 'Employees manage their profile, availability, and requests through mobile gestures and micro-animations.',
+    detail: 'Employees manage profile, availability, and requests using calm, mobile-friendly flows.',
   },
   {
     heading: 'Security layers',
-    detail: 'Supabase Row Level Security, email verification, and audit trails are enabled by default.',
+    detail: 'Supabase Row Level Security, email verification, and audit trails come standard.',
   },
 ];
 
 const contactChannels = [
   {
-    label: 'Demo Hotline',
+    label: 'Demo hotline',
     value: '+31 20 123 45 67',
   },
   {
-    label: 'MoofPlanning Desk',
+    label: 'MoofPlanning desk',
     value: 'ops@moofplanner.com',
   },
   {
-    label: 'Discord Crew',
+    label: 'Discord crew',
     value: 'discord.gg/moofplanner',
   },
 ];
@@ -124,9 +134,10 @@ export default function LandingPageClient() {
     let currentX = window.innerWidth / 2;
     let currentY = window.innerHeight / 2;
 
+    const smoothing = 0.45;
     const animate = () => {
-      currentX += (targetX - currentX) * 0.25;
-      currentY += (targetY - currentY) * 0.25;
+      currentX += (targetX - currentX) * smoothing;
+      currentY += (targetY - currentY) * smoothing;
       document.documentElement.style.setProperty('--cursor-x', `${currentX}px`);
       document.documentElement.style.setProperty('--cursor-y', `${currentY}px`);
       rafId = requestAnimationFrame(animate);
@@ -179,6 +190,65 @@ export default function LandingPageClient() {
   }, [menuOpen]);
 
   useEffect(() => {
+    const body = document.body;
+    if (!body) return;
+    const interactiveSelector = 'a[href], button, [role="button"], [data-interactive], .cta-primary, .cta-secondary, .plan-button, .menu-button, .nav-overlay__link, .store-pill';
+    let hoverState: 'default' | 'interactive' = 'default';
+
+    const applyState = (state: 'default' | 'interactive' | 'active') => {
+      body.dataset.cursorState = state;
+    };
+
+    applyState('default');
+
+    const evaluateTarget = (target: EventTarget | null) => {
+      if (target instanceof Element && target.closest(interactiveSelector)) {
+        hoverState = 'interactive';
+      } else {
+        hoverState = 'default';
+      }
+      if (body.dataset.cursorState !== 'active') {
+        applyState(hoverState);
+      }
+    };
+
+    const handlePointerOver = (event: PointerEvent) => {
+      evaluateTarget(event.target);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(interactiveSelector)) {
+        applyState('active');
+      } else {
+        applyState(hoverState);
+      }
+    };
+
+    const handlePointerUp = () => {
+      applyState(hoverState);
+    };
+
+    const resetState = () => {
+      hoverState = 'default';
+      applyState('default');
+    };
+
+    document.addEventListener('pointerover', handlePointerOver, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointerleave', resetState, true);
+    window.addEventListener('blur', resetState);
+
+    return () => {
+      document.removeEventListener('pointerover', handlePointerOver, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointerleave', resetState, true);
+      window.removeEventListener('blur', resetState);
+    };
+  }, []);
+
+  useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -227,7 +297,7 @@ export default function LandingPageClient() {
           <nav className={`nav-shell ${menuOpen ? 'nav-shell--overlay' : navPinned ? 'nav-shell--pinned' : 'nav-shell--top'}`}>
             <MoofPlannerLogo compact className="text-white" />
             <div className="flex gap-3">
-              <Link href="/login" className={`${plusJakarta.className} store-pill`}>Aanmelden</Link>
+              <Link href="/login" className={`${plusJakarta.className} store-pill`}>Sign up</Link>
               <button
                 type="button"
                 className={`menu-button ${menuOpen ? 'is-open' : ''}`}
@@ -266,7 +336,7 @@ export default function LandingPageClient() {
                 All planning tools for <span className="text-[#D2FF00]">planners</span>, <span className="text-[#F4F7E0]">managers</span> and <span className="text-[#D2FF00]">employees</span>.
               </h1>
               <p className="max-w-2xl text-lg text-white/80">
-                MoofPlanning bundelt roosters, contracten, urenregistratie en budgetbewaking in één serene cockpit. Automatisering en data-gedreven inzichten houden iedereen up-to-date, terwijl de UX menselijk en rustig blijft.
+                MoofPlanning bundles schedules, contracts, time tracking, and budgets into one serene cockpit. Automation and data-driven insights keep everyone aligned while the experience stays human.
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link href="#pricing" className="cta-primary">See pricing</Link>
@@ -278,7 +348,7 @@ export default function LandingPageClient() {
               <div className="hero-sigil__glow" />
               <div className="hero-sigil__photo" />
               <div className="hero-sigil__signature">MoofPlanning</div>
-              <div className="hero-sigil__caption">Centrale workspace</div>
+              <div className="hero-sigil__caption">Central workspace</div>
             </div>
           </div>
 
@@ -306,7 +376,7 @@ export default function LandingPageClient() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6">
           <div className="text-center">
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.45em] text-white/70`}>Price</p>
-            <h2 className={`${spaceGrotesk.className} mt-3 text-4xl font-semibold`}>Kies jouw grid.</h2>
+            <h2 className={`${spaceGrotesk.className} mt-3 text-4xl font-semibold`}>Choose your grid.</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {pricePlans.map((plan, idx) => (
@@ -327,7 +397,7 @@ export default function LandingPageClient() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/login" className="plan-button">Start met {plan.name}</Link>
+                <Link href="/login" className="plan-button">Start with {plan.name}</Link>
               </div>
             ))}
           </div>
@@ -338,7 +408,7 @@ export default function LandingPageClient() {
         <div className="mx-auto w-full max-w-6xl space-y-10 px-6">
           <div className="text-center">
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.45em] text-white/70`}>About</p>
-            <h2 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold`}>Wat is MoofPlanner?</h2>
+            <h2 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold`}>What is MoofPlanner?</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {aboutPillars.map((pillar, idx) => (
@@ -359,7 +429,7 @@ export default function LandingPageClient() {
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6">
           <div className="text-center">
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.45em] text-white/70`}>Account Flow</p>
-            <h2 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold`}>Accounts, rollen en beveiliging in één motion layer.</h2>
+            <h2 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold`}>Accounts, roles and security in one motion layer.</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {accountMoments.map((moment, idx) => (
@@ -381,9 +451,9 @@ export default function LandingPageClient() {
         <div className="mx-auto grid w-full max-w-5xl gap-8 px-6 py-16 md:grid-cols-[1.1fr_0.9fr]">
           <div>
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.45em] text-[#121b0d]`}>Contact</p>
-            <h3 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold text-[#121b0d]`}>Neem contact op met de MoofPlanning desk.</h3>
+            <h3 className={`${spaceGrotesk.className} mt-2 text-4xl font-semibold text-[#121b0d]`}>Get in touch with the MoofPlanning desk.</h3>
             <p className="mt-3 text-[#121b0d]/80">
-              Vraag een demo, laat je account onboarden of sync met ons operations-team. Wij reageren binnen één werkdag.
+              Request a demo, onboard your account, or sync with our operations crew. We reply within one business day.
             </p>
           </div>
           <div className="grid gap-4">
@@ -405,11 +475,11 @@ export default function LandingPageClient() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 text-white md:flex-row md:items-center md:justify-between">
           <div>
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.4em] text-white/70`}>Ready</p>
-            <h4 className={`${spaceGrotesk.className} mt-2 text-3xl font-semibold`}>Schakel vandaag over naar moeiteloze roosters.</h4>
+            <h4 className={`${spaceGrotesk.className} mt-2 text-3xl font-semibold`}>Switch to effortless schedules today.</h4>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/login" className="rounded-full bg-white px-6 py-3 text-[#111a0f] transition hover:bg-[#D2FF00]">
-              Account aanmaken
+              Create account
             </Link>
             <Link href="/contact" className="rounded-full border border-white px-6 py-3 text-white transition hover:border-[#D2FF00] hover:text-[#D2FF00]">
               Contact sales
