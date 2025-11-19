@@ -134,9 +134,10 @@ export default function LandingPageClient() {
     let currentX = window.innerWidth / 2;
     let currentY = window.innerHeight / 2;
 
+    const smoothing = 0.45;
     const animate = () => {
-      currentX += (targetX - currentX) * 0.25;
-      currentY += (targetY - currentY) * 0.25;
+      currentX += (targetX - currentX) * smoothing;
+      currentY += (targetY - currentY) * smoothing;
       document.documentElement.style.setProperty('--cursor-x', `${currentX}px`);
       document.documentElement.style.setProperty('--cursor-y', `${currentY}px`);
       rafId = requestAnimationFrame(animate);
@@ -187,6 +188,65 @@ export default function LandingPageClient() {
       document.body.style.overflow = '';
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    const body = document.body;
+    if (!body) return;
+    const interactiveSelector = 'a[href], button, [role="button"], [data-interactive], .cta-primary, .cta-secondary, .plan-button, .menu-button, .nav-overlay__link, .store-pill';
+    let hoverState: 'default' | 'interactive' = 'default';
+
+    const applyState = (state: 'default' | 'interactive' | 'active') => {
+      body.dataset.cursorState = state;
+    };
+
+    applyState('default');
+
+    const evaluateTarget = (target: EventTarget | null) => {
+      if (target instanceof Element && target.closest(interactiveSelector)) {
+        hoverState = 'interactive';
+      } else {
+        hoverState = 'default';
+      }
+      if (body.dataset.cursorState !== 'active') {
+        applyState(hoverState);
+      }
+    };
+
+    const handlePointerOver = (event: PointerEvent) => {
+      evaluateTarget(event.target);
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest(interactiveSelector)) {
+        applyState('active');
+      } else {
+        applyState(hoverState);
+      }
+    };
+
+    const handlePointerUp = () => {
+      applyState(hoverState);
+    };
+
+    const resetState = () => {
+      hoverState = 'default';
+      applyState('default');
+    };
+
+    document.addEventListener('pointerover', handlePointerOver, true);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('pointerup', handlePointerUp, true);
+    document.addEventListener('pointerleave', resetState, true);
+    window.addEventListener('blur', resetState);
+
+    return () => {
+      document.removeEventListener('pointerover', handlePointerOver, true);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('pointerup', handlePointerUp, true);
+      document.removeEventListener('pointerleave', resetState, true);
+      window.removeEventListener('blur', resetState);
+    };
+  }, []);
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
