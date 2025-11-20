@@ -68,6 +68,12 @@
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   }
 
+  .button-arrow {
+    display: inline-flex;
+    transform: translateX(0);
+    transition: transform 0.65s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
   button:not(.menu-button):hover,
   .store-pill:hover,
   .plan-button:hover,
@@ -77,7 +83,11 @@
     box-shadow: none;
   }
 
-  button:not(.menu-button):active,
+  button:not(.menu-button):hover .button-arrow {
+    transform: translateX(16px);
+  }
+
+button:not(.menu-button):active,
   .store-pill:active,
   .plan-button:active,
   .cta-primary:active,
@@ -86,6 +96,7 @@
     box-shadow: none;
   }
 }
+
 
 body::after,
 body::before {
@@ -735,8 +746,8 @@ input[type='number']::-webkit-outer-spin-button {
   color: #0b1309;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.35em;
-  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  font-size: 0.68rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;

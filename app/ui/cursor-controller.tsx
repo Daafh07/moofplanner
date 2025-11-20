@@ -85,18 +85,15 @@ export default function CursorController() {
     const updateContrast = (target: EventTarget | null) => {
       if (!(target instanceof Element)) {
         body.dataset.cursorContrast = 'light';
-        body.dataset.cursorOutline = '';
         return;
       }
       const bg = getBackgroundColor(target);
       if (!bg) {
         body.dataset.cursorContrast = 'light';
-        body.dataset.cursorOutline = '';
         return;
       }
       const brightness = (bg.r * 299 + bg.g * 587 + bg.b * 114) / 1000;
       body.dataset.cursorContrast = brightness > brightnessThreshold ? 'dark' : 'light';
-      body.dataset.cursorOutline = brightness < 60 ? 'glow' : '';
     };
 
     const applyState = (state: 'default' | 'interactive' | 'active') => {

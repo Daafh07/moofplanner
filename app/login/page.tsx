@@ -27,8 +27,8 @@ export default function LoginPage() {
       <div className="hero-rings" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-3xl items-center justify-center px-4 py-12">
-        <div className="w-full rounded-[56px] bg-gradient-to-br from-[rgba(244,247,224,0.25)] via-[rgba(210,255,0,0.08)] to-transparent p-[6px] shadow-[0_55px_140px_rgba(5,8,4,0.65)]">
-          <div className="rounded-[50px] border border-white/12 bg-[rgba(8,14,9,0.85)] text-white backdrop-blur-[40px]">
+        <div className="w-full rounded-[56px] bg-gradient-to-br from-[rgba(244,247,224,0.2)] via-[rgba(210,255,0,0.07)] to-transparent p-[5px] shadow-[0_55px_150px_rgba(5,8,4,0.65)]">
+          <div className="rounded-[52px] border border-white/10 bg-[rgba(8,14,9,0.9)] text-white backdrop-blur-[40px]">
             <div className="px-8 py-12 sm:px-16">
               <Suspense>
                 <AuthPanel />
