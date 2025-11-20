@@ -6,6 +6,7 @@ import { BoltIcon } from '@heroicons/react/24/outline';
 import MoofPlannerLogo from '@/app/ui/moofplanner-logo';
 import { spaceGrotesk, plusJakarta } from '@/app/ui/fonts';
 import { Metadata } from 'next';
+import CursorController from '@/app/ui/cursor-controller';
 
 
 export const metadata: Metadata = {
@@ -128,49 +129,6 @@ export default function LandingPageClient() {
   const [activeNav, setActiveNav] = useState<string>('Home');
 
   useEffect(() => {
-    let rafId: number | null = null;
-    let targetX = 0;
-    let targetY = 0;
-    let currentX = window.innerWidth / 2;
-    let currentY = window.innerHeight / 2;
-
-    const smoothing = 0.45;
-    const animate = () => {
-      currentX += (targetX - currentX) * smoothing;
-      currentY += (targetY - currentY) * smoothing;
-      document.documentElement.style.setProperty('--cursor-x', `${currentX}px`);
-      document.documentElement.style.setProperty('--cursor-y', `${currentY}px`);
-      rafId = requestAnimationFrame(animate);
-    };
-
-    const setTarget = (event: PointerEvent) => {
-      targetX = event.clientX;
-      targetY = event.clientY;
-      document.documentElement.style.setProperty('--cursor-visible', '1');
-      if (rafId === null) rafId = requestAnimationFrame(animate);
-    };
-
-    const hideCursor = () => {
-      document.documentElement.style.setProperty('--cursor-visible', '0');
-    };
-
-    window.addEventListener('pointermove', setTarget, { passive: true });
-    window.addEventListener('pointerdown', setTarget, { passive: true });
-    window.addEventListener('pointerenter', setTarget, { passive: true });
-    window.addEventListener('pointerleave', hideCursor);
-    window.addEventListener('blur', hideCursor);
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      window.removeEventListener('pointermove', setTarget);
-      window.removeEventListener('pointerdown', setTarget);
-      window.removeEventListener('pointerenter', setTarget);
-      window.removeEventListener('pointerleave', hideCursor);
-      window.removeEventListener('blur', hideCursor);
-    };
-  }, []);
-
-  useEffect(() => {
     const doc = document.documentElement;
     const handleScroll = () => {
       const docHeight = doc.scrollHeight - window.innerHeight;
@@ -188,65 +146,7 @@ export default function LandingPageClient() {
       document.body.style.overflow = '';
     };
   }, [menuOpen]);
-
-  useEffect(() => {
-    const body = document.body;
-    if (!body) return;
-    const interactiveSelector = 'a[href], button, [role="button"], [data-interactive], .cta-primary, .cta-secondary, .plan-button, .menu-button, .nav-overlay__link, .store-pill';
-    let hoverState: 'default' | 'interactive' = 'default';
-
-    const applyState = (state: 'default' | 'interactive' | 'active') => {
-      body.dataset.cursorState = state;
-    };
-
-    applyState('default');
-
-    const evaluateTarget = (target: EventTarget | null) => {
-      if (target instanceof Element && target.closest(interactiveSelector)) {
-        hoverState = 'interactive';
-      } else {
-        hoverState = 'default';
-      }
-      if (body.dataset.cursorState !== 'active') {
-        applyState(hoverState);
-      }
-    };
-
-    const handlePointerOver = (event: PointerEvent) => {
-      evaluateTarget(event.target);
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest(interactiveSelector)) {
-        applyState('active');
-      } else {
-        applyState(hoverState);
-      }
-    };
-
-    const handlePointerUp = () => {
-      applyState(hoverState);
-    };
-
-    const resetState = () => {
-      hoverState = 'default';
-      applyState('default');
-    };
-
-    document.addEventListener('pointerover', handlePointerOver, true);
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('pointerup', handlePointerUp, true);
-    document.addEventListener('pointerleave', resetState, true);
-    window.addEventListener('blur', resetState);
-
-    return () => {
-      document.removeEventListener('pointerover', handlePointerOver, true);
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('pointerup', handlePointerUp, true);
-      document.removeEventListener('pointerleave', resetState, true);
-      window.removeEventListener('blur', resetState);
-    };
-  }, []);
+  
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
@@ -284,8 +184,37 @@ export default function LandingPageClient() {
     }
   };
 
+  useEffect(() => {
+    const sectionMap = navLinks.map((link) => {
+      const id = link.href.replace('#', '');
+      return {
+        label: link.label,
+        element: typeof document !== 'undefined' ? document.getElementById(id) : null,
+      };
+    });
+
+    const handleSectionChange = () => {
+      const midpoint = window.scrollY + window.innerHeight / 2;
+      let current = navLinks[0]?.label ?? 'Home';
+
+      sectionMap.forEach((section) => {
+        if (!section.element) return;
+        if (midpoint >= section.element.offsetTop) {
+          current = section.label;
+        }
+      });
+
+      setActiveNav(current);
+    };
+
+    handleSectionChange();
+    window.addEventListener('scroll', handleSectionChange, { passive: true });
+    return () => window.removeEventListener('scroll', handleSectionChange);
+  }, []);
+
   return (
     <div className="bg-[#0C1208] text-white">
+      <CursorController />
       <section
         id="hero"
         className="relative min-h-screen overflow-hidden neon-hero"
@@ -323,7 +252,18 @@ export default function LandingPageClient() {
                       setMenuOpen(false);
                     }}
                   >
-                    {link.label}
+                    <span className="nav-overlay__text">
+                      {link.label.split('').map((char, idx) => (
+                        <span
+                          key={`${link.label}-${idx}`}
+                          className="nav-overlay__char"
+                          style={{ ['--char-index' as string]: idx }}
+                          data-char={char === ' ' ? '\u00A0' : char}
+                        >
+                          {char === ' ' ? '\u00A0' : char}
+                        </span>
+                      ))}
+                    </span>
                   </Link>
                 ))}
               </div>
@@ -333,14 +273,17 @@ export default function LandingPageClient() {
           <div className="grid flex-1 items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-7 text-left">
               <h1 className={`${spaceGrotesk.className} text-4xl font-semibold leading-tight sm:text-6xl`}>
-                All planning tools for <span className="text-[#D2FF00]">planners</span>, <span className="text-[#F4F7E0]">managers</span> and <span className="text-[#D2FF00]">employees</span>.
+                All planning tools for{' '}
+                <span style={{ color: '#D2FF00' }}>planners</span>,{' '}
+                <span style={{ color: '#F4F7E0' }}>managers</span>{' '}
+                and <span style={{ color: '#D2FF00' }}>employees</span>.
               </h1>
               <p className="max-w-2xl text-lg text-white/80">
                 MoofPlanning bundles schedules, contracts, time tracking, and budgets into one serene cockpit. Automation and data-driven insights keep everyone aligned while the experience stays human.
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link href="#pricing" className="cta-primary">See pricing</Link>
-                <Link href="#about" className="cta-secondary">Discover concept</Link>
+                <Link href="#about" className="cta-secondary text-contrast">Discover concept</Link>
               </div>
             </div>
 
@@ -475,13 +418,19 @@ export default function LandingPageClient() {
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-6 text-white md:flex-row md:items-center md:justify-between">
           <div>
             <p className={`${plusJakarta.className} text-sm uppercase tracking-[0.4em] text-white/70`}>Ready</p>
-            <h4 className={`${spaceGrotesk.className} mt-2 text-3xl font-semibold`}>Switch to effortless schedules today.</h4>
+            <h4 className={`${spaceGrotesk.className} mt-2 text-3xl font-semibold`}>Switch to effortless schedules <span style={{ color: '#D2FF00' }}>today</span>.{' '}</h4>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/login" className="rounded-full bg-white px-6 py-3 text-[#111a0f] transition hover:bg-[#D2FF00]">
+          <div className={`flex flex-wrap gap-3 md:flex-nowrap ${plusJakarta.className}`}>
+            <Link
+              href="/login"
+              className="rounded-full border border-white/20 bg-white px-8 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-[#111a0f] transition hover:bg-[#D2FF00] whitespace-nowrap"
+            >
               Create account
             </Link>
-            <Link href="/contact" className="rounded-full border border-white px-6 py-3 text-white transition hover:border-[#D2FF00] hover:text-[#D2FF00]">
+            <Link
+              href="/contact"
+              className="outline-button rounded-full px-8 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white whitespace-nowrap"
+            >
               Contact sales
             </Link>
           </div>

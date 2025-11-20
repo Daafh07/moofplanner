@@ -6,6 +6,9 @@ import { redirect } from 'next/navigation';
 import postgres from 'postgres';
 import { auth, signIn } from '@/auth';
 import { AuthError } from 'next-auth';
+import bcrypt from 'bcrypt';
+import { randomUUID } from 'crypto';
+import type { User } from '@/app/lib/definitions';
  
 const sql = (() => {
   if (!process.env.POSTGRES_URL) {
@@ -23,6 +26,20 @@ const FormSchema = z.object({
 });
  
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
+
+const SignupSchema = z.object({
+  fullName: z.string().min(2, 'Full name is required'),
+  email: z.string().email('Valid email required'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  plan: z.string().min(1, 'Choose a plan'),
+});
+
+export type SignupState = {
+  status: 'idle' | 'success' | 'error';
+  message?: string;
+};
+
+const defaultSignupState: SignupState = { status: 'idle', message: undefined };
 
 async function ensureAuthenticated() {
   const session = await auth();
@@ -127,4 +144,58 @@ export async function authenticate(
     }
     throw error;
   }
+}
+
+export async function registerUser(
+  prevState: SignupState = defaultSignupState,
+  formData: FormData,
+): Promise<SignupState> {
+  const parsed = SignupSchema.safeParse({
+    fullName: formData.get('fullName'),
+    email: formData.get('email'),
+    password: formData.get('password'),
+    plan: formData.get('plan'),
+  });
+
+  if (!parsed.success) {
+    return {
+      status: 'error',
+      message: parsed.error.errors[0]?.message ?? 'Invalid form input.',
+    };
+  }
+
+  const { fullName, email, password, plan } = parsed.data;
+
+  const existing = await sql<User[]>`SELECT id FROM users WHERE email=${email}`;
+  if (existing.length > 0) {
+    return { status: 'error', message: 'Email already registered.' };
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const userId = randomUUID();
+
+  try {
+    await sql`
+      INSERT INTO users (id, name, email, password)
+      VALUES (${userId}, ${fullName}, ${email}, ${hashedPassword})
+    `;
+  } catch (error) {
+    console.error(error);
+    return { status: 'error', message: 'Failed to create account. Try again.' };
+  }
+
+  // Optional metadata table insert; ignore errors if table doesn't exist.
+  try {
+    await sql`
+      INSERT INTO user_plans (user_id, plan, created_at)
+      VALUES (${userId}, ${plan}, NOW())
+    `;
+  } catch (error) {
+    console.warn('user_plans insert skipped:', error);
+  }
+
+  return {
+    status: 'success',
+    message: 'Account created! You can sign in now.',
+  };
 }
