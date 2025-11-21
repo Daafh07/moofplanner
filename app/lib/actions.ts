@@ -30,9 +30,23 @@ const CreateInvoice = FormSchema.omit({ id: true, date: true });
 const SignupSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   email: z.string().email('Valid email required'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  plan: z.string().min(1, 'Choose a plan'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  plan: z.enum(['basic', 'next', 'enterprise'], { message: 'Choose a valid plan' }),
+  companyName: z.string().min(2, 'Company name is required'),
+  companyEmail: z.string().email('Company contact email required'),
+  headcount: z.coerce.number().min(1, 'Headcount must be at least 1'),
+  region: z.string().min(2, 'Headquarters location is required'),
+  vatNumber: z.string().min(4, 'Official VAT/Tax number required'),
+  registrationId: z.string().min(4, 'Chamber of Commerce / business ID required'),
+  billingAddress: z.string().min(5, 'Billing address is required'),
+  industry: z.string().min(2, 'Industry is required'),
 });
+
+const planRules = {
+  basic: { seatLimit: 20, billingMode: 'company' as const },
+  next: { seatLimit: 75, billingMode: 'per_user' as const },
+  enterprise: { seatLimit: null as number | null, billingMode: 'enterprise' as const },
+};
 
 export type SignupState = {
   status: 'idle' | 'success' | 'error';
@@ -121,7 +135,7 @@ export async function deleteInvoice(id: string) {
     await sql`DELETE FROM invoices WHERE id = ${id}`;
   } catch (error) {
     console.error(error);
-    return { message: 'Database Error: Failed to Delete Invoice.' };
+    throw new Error('Database Error: Failed to Delete Invoice.');
   }
 
   revalidatePath('/dashboard/invoices');
@@ -155,6 +169,14 @@ export async function registerUser(
     email: formData.get('email'),
     password: formData.get('password'),
     plan: formData.get('plan'),
+    companyName: formData.get('companyName'),
+    companyEmail: formData.get('companyEmail'),
+    headcount: formData.get('headcount'),
+    region: formData.get('region'),
+    vatNumber: formData.get('vatNumber'),
+    registrationId: formData.get('registrationId'),
+    billingAddress: formData.get('billingAddress'),
+    industry: formData.get('industry'),
   });
 
   if (!parsed.success) {
@@ -164,34 +186,96 @@ export async function registerUser(
     };
   }
 
-  const { fullName, email, password, plan } = parsed.data;
+  const {
+    fullName,
+    email,
+    password,
+    plan,
+    companyName,
+    companyEmail,
+    headcount,
+    region,
+    vatNumber,
+    registrationId,
+    billingAddress,
+    industry,
+  } = parsed.data;
 
-  const existing = await sql<User[]>`SELECT id FROM users WHERE email=${email}`;
+  const personalEmail = email.trim().toLowerCase();
+  const loginEmail = companyEmail.trim().toLowerCase();
+
+  const rule = planRules[plan];
+  if (!rule) {
+    return { status: 'error', message: 'Selected plan is not available.' };
+  }
+
+  if (rule.seatLimit !== null && headcount > rule.seatLimit) {
+    return {
+      status: 'error',
+      message: `Headcount exceeds the ${plan === 'basic' ? 'Basic' : 'Next Step'} plan allowance (${rule.seatLimit} employees). Choose a different plan or reduce headcount.`,
+    };
+  }
+
+  const existing = await sql<User[]>`SELECT id FROM users WHERE email=${loginEmail}`;
   if (existing.length > 0) {
     return { status: 'error', message: 'Email already registered.' };
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
   const userId = randomUUID();
+  const companyId = randomUUID();
 
   try {
     await sql`
       INSERT INTO users (id, name, email, password)
-      VALUES (${userId}, ${fullName}, ${email}, ${hashedPassword})
+      VALUES (${userId}, ${fullName}, ${loginEmail}, ${hashedPassword})
     `;
   } catch (error) {
     console.error(error);
     return { status: 'error', message: 'Failed to create account. Try again.' };
   }
 
-  // Optional metadata table insert; ignore errors if table doesn't exist.
+  // Optional metadata inserts; ignore errors if tables don't exist yet.
   try {
     await sql`
-      INSERT INTO user_plans (user_id, plan, created_at)
-      VALUES (${userId}, ${plan}, NOW())
+      INSERT INTO companies (
+        id,
+        name,
+        contact_email,
+        headcount,
+        region,
+        plan,
+        billing_mode,
+        seat_limit,
+        vat_number,
+        registration_id,
+        billing_address,
+        industry,
+        created_at
+      )
+      VALUES (
+        ${companyId},
+        ${companyName},
+        ${personalEmail},
+        ${headcount},
+        ${region},
+        ${plan},
+        ${rule.billingMode},
+        ${rule.seatLimit},
+        ${vatNumber},
+        ${registrationId},
+        ${billingAddress},
+        ${industry},
+        NOW()
+      )
+    `;
+
+    await sql`
+      INSERT INTO company_admins (company_id, user_id, role, created_at)
+      VALUES (${companyId}, ${userId}, 'owner', NOW())
     `;
   } catch (error) {
-    console.warn('user_plans insert skipped:', error);
+    console.warn('Company metadata insert skipped:', error);
   }
 
   return {
