@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import postgres from 'postgres';
-import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import { invoices, customers, revenue, users, events } from '../lib/placeholder-data';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
@@ -101,6 +101,30 @@ async function seedRevenue() {
   return insertedRevenue;
 }
 
+async function seedEvents() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS events (
+      id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+      title TEXT NOT NULL,
+      event_date DATE NOT NULL,
+      attendees INT NOT NULL,
+      category TEXT NOT NULL
+    );
+  `;
+
+  const insertedEvents = await Promise.all(
+    events.map(
+      (event) => sql`
+        INSERT INTO events (id, title, event_date, attendees, category)
+        VALUES (${event.id}, ${event.title}, ${event.event_date}, ${event.attendees}, ${event.category})
+        ON CONFLICT (id) DO NOTHING;
+      `,
+    ),
+  );
+
+  return insertedEvents;
+}
+
 export async function GET() {
   if (
     process.env.NODE_ENV !== 'development' &&
@@ -114,6 +138,7 @@ export async function GET() {
       seedCustomers(),
       seedInvoices(),
       seedRevenue(),
+      seedEvents(),
     ]);
 
     return Response.json({ message: 'Database seeded successfully' });

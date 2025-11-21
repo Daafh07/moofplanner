@@ -51,3 +51,27 @@ export const revenue = [
   { month: 'May', revenue: 16200 },
   { month: 'Jun', revenue: 17500 },
 ];
+
+export const events = [
+  {
+    id: '3a1a8c2d-1234-4de1-8c93-0f11e24cb1af',
+    title: 'Training kassa',
+    event_date: '2024-08-21',
+    attendees: 12,
+    category: 'training',
+  },
+  {
+    id: '6cbd41f7-22d9-48f8-9b2d-21cb5af66159',
+    title: 'Winkelactie zomer',
+    event_date: '2024-08-24',
+    attendees: 6,
+    category: 'actie',
+  },
+  {
+    id: '17ecb205-7f5e-40b7-b2d8-4f7da2521adf',
+    title: 'Verjaardag L. Chan',
+    event_date: '2024-08-26',
+    attendees: 1,
+    category: 'feestdag',
+  },
+];
