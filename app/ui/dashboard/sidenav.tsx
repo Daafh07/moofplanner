@@ -3,30 +3,34 @@ import NavLinks from '@/app/ui/dashboard/nav-links';
 import MoofPlannerLogo from '@/app/ui/moofplanner-logo';
 import { PowerIcon } from '@heroicons/react/24/outline';
 import { signOut } from '@/auth';
-
+import { plusJakarta } from '@/app/ui/fonts';
 
 export default function SideNav() {
   return (
-    <div className="flex h-full flex-col px-3 py-4 md:px-2">
-      <Link
-        className="mb-4 flex h-24 items-center justify-center rounded-md bg-blue-600 p-4 md:h-40"
-        href="/"
-      >
-        <div className="flex w-full items-center justify-center text-white">
-          <MoofPlannerLogo compact />
+    <div className="flex h-full flex-col gap-6 px-4 py-6 text-white">
+      <Link href="/" className="rounded-[24px] border border-white/10 bg-gradient-to-br from-[#141f0d] to-[#080f08] p-5 shadow-[0_25px_60px_rgba(2,4,1,0.4)]">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <MoofPlannerLogo compact className="text-white" />
+          <p className={`${plusJakarta.className} text-[0.5rem] uppercase tracking-[0.45em] text-white/60`}>
+            Planner cockpit
+          </p>
         </div>
       </Link>
-      <div className="flex grow flex-row justify-between space-x-2 md:flex-col md:space-x-0 md:space-y-2">
+
+      <nav className="flex flex-col gap-3">
         <NavLinks />
-        <div className="hidden h-auto w-full grow rounded-md bg-gray-50 md:block"></div>
-        <form action={async () => {
+      </nav>
+
+      <div className="mt-auto text-sm text-white/70">
+        <form
+          action={async () => {
             'use server';
             await signOut({ redirectTo: '/' });
           }}
-          >
-          <button className="flex h-[48px] w-full grow items-center justify-center gap-2 rounded-md bg-gray-50 p-3 text-sm font-medium hover:bg-sky-100 hover:text-blue-600 md:flex-none md:justify-start md:p-2 md:px-3">
-            <PowerIcon className="w-6" />
-            <div className="hidden md:block">Sign Out</div>
+        >
+          <button className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white">
+            <PowerIcon className="w-4" />
+            Sign out
           </button>
         </form>
       </div>

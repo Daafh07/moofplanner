@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="relative min-h-screen overflow-hidden moof-gradient text-white">
+    <main className="relative min-h-screen overflow-hidden moof-gradient text-white pt-28 sm:pt-32">
       <CursorController />
       <nav className="nav-shell nav-shell--top">
         <MoofPlannerLogo compact className="text-white" />

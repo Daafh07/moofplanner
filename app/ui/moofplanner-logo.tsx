@@ -11,7 +11,7 @@ export default function MoofPlannerLogo({
   className,
 }: MoofPlannerLogoProps) {
   const textClass = compact
-    ? 'text-[32px] md:text-[40px] font-semibold'
+    ? 'text-2xl md:text-3xl font-semibold tracking-[0.08em]'
     : 'text-[40px] md:text-[48px] font-semibold';
 
   return (
