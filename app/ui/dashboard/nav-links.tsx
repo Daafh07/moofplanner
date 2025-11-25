@@ -3,7 +3,6 @@
 import {
   HomeIcon,
   UsersIcon,
-  CalendarDaysIcon,
   PresentationChartLineIcon,
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
@@ -15,7 +14,6 @@ import clsx from 'clsx';
 const links = [
   { name: 'Overzicht', href: '/dashboard', icon: HomeIcon },
   { name: 'Organisatie', href: '/dashboard/customers', icon: UsersIcon },
-  { name: 'Roosters', href: '/dashboard/invoices', icon: CalendarDaysIcon },
   { name: 'Prognose', href: '/dashboard/forecasts', icon: PresentationChartLineIcon },
   { name: 'Instellingen', href: '/dashboard/settings', icon: Cog6ToothIcon },
   { name: 'Exports', href: '/dashboard/exports', icon: ArrowRightOnRectangleIcon },
