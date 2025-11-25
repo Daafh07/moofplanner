@@ -28,21 +28,6 @@ export const customers = [
   },
 ];
 
-export const invoices = [
-  {
-    customer_id: customers[0].id,
-    amount: 324500,
-    status: 'paid',
-    date: '2024-08-12',
-  },
-  {
-    customer_id: customers[1].id,
-    amount: 418000,
-    status: 'pending',
-    date: '2024-08-15',
-  },
-];
-
 export const revenue = [
   { month: 'Jan', revenue: 12500 },
   { month: 'Feb', revenue: 14100 },

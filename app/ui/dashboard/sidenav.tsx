@@ -2,8 +2,8 @@ import Link from 'next/link';
 import NavLinks from '@/app/ui/dashboard/nav-links';
 import MoofPlannerLogo from '@/app/ui/moofplanner-logo';
 import { PowerIcon } from '@heroicons/react/24/outline';
-import { signOut } from '@/auth';
 import { plusJakarta } from '@/app/ui/fonts';
+import { signOut } from '@/auth';
 
 export default function SideNav() {
   return (
@@ -25,7 +25,8 @@ export default function SideNav() {
         <form
           action={async () => {
             'use server';
-            await signOut({ redirectTo: '/' });
+            // NextAuth will clear the session cookie and redirect.
+            return signOut({ redirectTo: '/login' });
           }}
         >
           <button className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-white/40 hover:text-white">
