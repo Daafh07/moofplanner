@@ -13,21 +13,6 @@ export const users = [
   },
 ];
 
-export const customers = [
-  {
-    id: 'b6c815fb-4307-4d0b-a856-0bcd940d2570',
-    name: 'Moof Retail Group',
-    email: 'contact@moofretail.com',
-    image_url: '/customers/moof-retail.png',
-  },
-  {
-    id: 'a2f957b1-7c6f-4d4e-86a7-4a2d4ddd8d8f',
-    name: 'Urban Grocery',
-    email: 'info@urbangrocery.com',
-    image_url: '/customers/urban-grocery.png',
-  },
-];
-
 export const revenue = [
   { month: 'Jan', revenue: 12500 },
   { month: 'Feb', revenue: 14100 },

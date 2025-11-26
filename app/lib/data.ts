@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { CustomerField, Revenue, FormattedCustomersTable } from './definitions';
+import { Revenue, Employee, Department, PlanningTime, AdminUser } from './definitions';
 import { formatCurrency } from './utils';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
@@ -101,57 +101,74 @@ export async function fetchRevenue() {
 }
 
 export async function fetchCardData() {
-  const customerCount = await sql`SELECT COUNT(*) FROM customers`;
-
-  return {
-    numberOfCustomers: Number(customerCount[0].count ?? '0'),
-  };
+  return {};
 }
 
-export async function fetchCustomers() {
+export async function fetchEmployeesByUser(userId: string) {
   try {
-    const customers = await sql<CustomerField[]>`
-      SELECT
-        id,
-        name
-      FROM customers
-      ORDER BY name ASC
+    const employees = await sql<Employee[]>`
+      SELECT e.*
+      FROM employees e
+      WHERE e.company_id = (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      ORDER BY e.created_at DESC
     `;
-
-    return customers;
+    return employees;
   } catch (err) {
     console.error('Database Error:', err);
-    throw new Error('Failed to fetch all customers.');
+    return [];
   }
 }
 
-export async function fetchFilteredCustomers(query: string) {
+export async function fetchDepartmentsByUser(userId: string) {
   try {
-    const data = await sql<{
-      id: string;
-      name: string;
-      email: string;
-      image_url: string;
-    }[]>`
-      SELECT
-        customers.id,
-        customers.name,
-        customers.email,
-        customers.image_url
-      FROM customers
-      WHERE
-        customers.name ILIKE ${`%${query}%`} OR
-        customers.email ILIKE ${`%${query}%`}
-      ORDER BY customers.name ASC
+    const departments = await sql<Department[]>`
+      SELECT d.*
+      FROM departments d
+      WHERE d.company_id = (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      ORDER BY d.created_at DESC
     `;
-
-    const customers: FormattedCustomersTable[] = data.map((customer) => ({
-      ...customer,
-    }));
-
-    return customers;
+    return departments;
   } catch (err) {
     console.error('Database Error:', err);
-    throw new Error('Failed to fetch customer table.');
+    return [];
+  }
+}
+
+export async function fetchPlanningTimesByUser(userId: string) {
+  try {
+    const items = await sql<PlanningTime[]>`
+      SELECT p.*
+      FROM planning_times p
+      WHERE p.company_id = (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      ORDER BY COALESCE(p.is_default, false) DESC, p.created_at DESC
+    `;
+    return items;
+  } catch (err) {
+    console.error('Database Error:', err);
+    return [];
+  }
+}
+
+export async function fetchAdminsByUser(userId: string) {
+  try {
+    const admins = await sql<AdminUser[]>`
+      SELECT ca.company_id, ca.role, ca.created_at, u.id as user_id, u.name, u.email
+      FROM company_admins ca
+      JOIN users u ON ca.user_id = u.id
+      WHERE ca.company_id = (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      ORDER BY ca.created_at DESC
+    `;
+    return admins;
+  } catch (err) {
+    console.error('Database Error:', err);
+    return [];
   }
 }
