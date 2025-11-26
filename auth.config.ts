@@ -1,11 +1,24 @@
 import type { NextAuthConfig } from 'next-auth';
 import { NextResponse } from 'next/server';
 
+const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+if (!secret) {
+  throw new Error('NEXTAUTH_SECRET (or AUTH_SECRET) must be set for authentication to work securely.');
+}
+
 export const authConfig = {
   pages: {
     signIn: '/login',
   },
+  secret,
+  trustHost: true,
   callbacks: {
+    async session({ session, token }) {
+      if (session.user && token.sub) {
+        (session.user as { id?: string }).id = token.sub;
+      }
+      return session;
+    },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const isOnDashboard = nextUrl.pathname.startsWith('/dashboard');
@@ -13,8 +26,6 @@ export const authConfig = {
       const loginUrl = new URL('/login', nextUrl);
 
       if (isOnDashboard && !isLoggedIn) {
-        loginUrl.searchParams.set('callbackUrl', nextUrl.pathname + nextUrl.search);
-        loginUrl.searchParams.set('message', 'Log in om het dashboard te bekijken.');
         return NextResponse.redirect(loginUrl);
       }
 

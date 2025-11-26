@@ -9,6 +9,7 @@ type Props = {
   redirectTo?: string;
   redirectAuthenticatedTo?: string;
   requiresAuth?: boolean;
+  fallback?: React.ReactNode;
 };
 
 export default function ProtectedRoute({
@@ -32,14 +33,6 @@ export default function ProtectedRoute({
       router.replace(redirectAuthenticatedTo);
     }
   }, [status, router, redirectTo, redirectAuthenticatedTo, pathname, requiresAuth]);
-
-  if (status === 'loading') {
-    return null;
-  }
-
-  if (status === 'unauthenticated' && requiresAuth) {
-    return null;
-  }
 
   return <>{children}</>;
 }
