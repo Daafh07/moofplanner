@@ -57,20 +57,20 @@ export async function authenticate(
   try {
     const result = await signIn('credentials', {
       redirectTo,
-      redirect: false,
+      redirect: true,
       email: formData.get('email'),
       password: formData.get('password'),
     });
 
-    if (result?.error) {
-      return 'Invalid credentials.';
-    }
+    // if (result?.error) {
+    //   return 'Invalid credentials.';
+    // }
 
-    if (result?.url) {
-      redirect(result.url);
-    }
+    // if (result?.url) {
+    //   redirect(result.url);
+    // }
 
-    redirect(redirectTo);
+    // redirect(redirectTo);
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
@@ -235,7 +235,7 @@ const EmployeeSchema = z.object({
   role: z.string().min(2, 'Role is required'),
   departments: z.string().optional(), // comma separated
   skills: z.string().optional(), // comma separated
-  salaryMonthly: z.coerce.number().min(0, 'Salary must be positive'),
+  salaryHourly: z.coerce.number().min(0, 'Salary must be positive'),
   password: z.string().min(8, 'Password must be at least 8 characters').optional(),
 });
 
@@ -253,7 +253,20 @@ async function getCompanyIdForUser(userId: string) {
   return result[0]?.company_id;
 }
 
-export async function createEmployee(prevState: EmployeeState = defaultEmployeeState, formData: FormData) {
+async function refreshHeadcount(companyId: string) {
+  await sql`
+    UPDATE companies
+    SET headcount = (
+      SELECT COUNT(*) FROM employees WHERE company_id = ${companyId}
+    )
+    WHERE id = ${companyId}
+  `;
+}
+
+export async function createEmployee(
+  prevState: EmployeeState = defaultEmployeeState,
+  formData: FormData,
+): Promise<EmployeeState> {
   try {
     const session = await ensureAuthenticated();
     const userId = (session.user as { id?: string } | undefined)?.id;
@@ -275,7 +288,12 @@ export async function createEmployee(prevState: EmployeeState = defaultEmployeeS
       role: formData.get('role'),
       departments: formData.get('departments'),
       skills: formData.get('skills'),
-      salaryMonthly: formData.get('salaryMonthly'),
+      salaryHourly: formData.get('salaryHourly'),
+      password: (() => {
+        const raw = formData.get('password');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length > 0 ? val : undefined;
+      })(),
     });
 
     if (!parsed.success) {
@@ -291,7 +309,7 @@ export async function createEmployee(prevState: EmployeeState = defaultEmployeeS
       role,
       departments,
       skills,
-      salaryMonthly,
+      salaryHourly,
       password,
     } = parsed.data;
 
@@ -306,7 +324,7 @@ export async function createEmployee(prevState: EmployeeState = defaultEmployeeS
         .map((s) => s.trim())
         .filter(Boolean) ?? [];
 
-    const salaryCents = Math.round((salaryMonthly ?? 0) * 100);
+    const salaryCents = Math.round((salaryHourly ?? 0) * 100);
 
     await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
     await sql`
@@ -388,13 +406,129 @@ export async function createEmployee(prevState: EmployeeState = defaultEmployeeS
       )
     `;
 
-    // Keep headcount roughly in sync.
-    await sql`UPDATE companies SET headcount = COALESCE(headcount, 0) + 1 WHERE id = ${companyId}`;
+    // Keep headcount in sync with current employee total.
+    await refreshHeadcount(companyId);
 
     return { status: 'success', message: 'Employee created.' };
   } catch (error) {
     console.error('Create employee failed:', error);
     return { status: 'error', message: 'Employee could not be created.' };
+  }
+}
+
+export async function updateEmployee(
+  prevState: EmployeeState = defaultEmployeeState,
+  formData: FormData,
+): Promise<EmployeeState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing employee id.' };
+
+    const parsed = EmployeeSchema.safeParse({
+      name: formData.get('name'),
+      email: formData.get('email'),
+      phone: formData.get('phone'),
+      contractType: formData.get('contractType'),
+      hoursPerWeek: formData.get('hoursPerWeek'),
+      role: formData.get('role'),
+      departments: formData.get('departments'),
+      skills: formData.get('skills'),
+      salaryHourly: formData.get('salaryHourly'),
+      password: (() => {
+        const raw = formData.get('password');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length > 0 ? val : undefined;
+      })(),
+    });
+
+    if (!parsed.success) {
+      return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
+    }
+
+    const { name, email, phone, contractType, hoursPerWeek, role, departments, skills, salaryHourly, password } =
+      parsed.data;
+    const departmentList =
+      departments
+        ?.split(',')
+        .map((d) => d.trim())
+        .filter(Boolean) ?? [];
+    const skillsList =
+      skills
+        ?.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) ?? [];
+    const salaryCents = Math.round((salaryHourly ?? 0) * 100);
+
+    let linkedUserId: string | null = null;
+    if (password) {
+      const existingUser = await sql<User[]>`SELECT id FROM users WHERE email=${email.toLowerCase()} LIMIT 1`;
+      linkedUserId = existingUser[0]?.id ?? null;
+      if (!linkedUserId) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        linkedUserId = randomUUID();
+        await sql`
+          INSERT INTO users (id, name, email, password)
+          VALUES (${linkedUserId}, ${name}, ${email.toLowerCase()}, ${hashedPassword})
+        `;
+      }
+    }
+
+    const updated = await sql`
+      UPDATE employees
+      SET name=${name},
+          email=${email},
+          phone=${phone ?? null},
+          contract_type=${contractType},
+          hours_per_week=${hoursPerWeek},
+          role=${role},
+          departments=${departmentList},
+          skills=${skillsList},
+          salary_cents=${salaryCents},
+          user_id=${linkedUserId ?? null}
+      WHERE id=${id} AND company_id=${companyId}
+      RETURNING id
+    `;
+    if (updated.count === 0) {
+      return { status: 'error', message: 'Employee not found or not in your company.' };
+    }
+    return { status: 'success', message: 'Employee updated.' };
+  } catch (error) {
+    console.error('Update employee failed:', error);
+    return { status: 'error', message: 'Employee could not be updated.' };
+  }
+}
+
+export async function deleteEmployee(
+  prevState: EmployeeState = defaultEmployeeState,
+  formData: FormData,
+): Promise<EmployeeState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing employee id.' };
+
+    const res = await sql`DELETE FROM employees WHERE id=${id} AND company_id=${companyId}`;
+    if (res.count > 0) {
+      await refreshHeadcount(companyId);
+      return { status: 'success', message: 'Employee deleted.' };
+    }
+    return { status: 'error', message: 'Employee not found or not in your company.' };
+  } catch (error) {
+    console.error('Delete employee failed:', error);
+    return { status: 'error', message: 'Employee could not be deleted.' };
   }
 }
 
@@ -446,6 +580,76 @@ export async function createDepartment(prevState: DepartmentState = defaultDepar
   }
 }
 
+export async function updateDepartment(
+  prevState: DepartmentState = defaultDepartmentState,
+  formData: FormData,
+): Promise<DepartmentState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing department id.' };
+
+    const parsed = DepartmentSchema.safeParse({
+      name: formData.get('name'),
+      description: formData.get('description'),
+    });
+    if (!parsed.success) {
+      return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
+    }
+    const { name, description } = parsed.data;
+
+    const res = await sql`
+      UPDATE departments
+      SET name=${name}, description=${description ?? null}
+      WHERE id=${id} AND company_id=${companyId}
+      RETURNING id
+    `;
+    if (res.count === 0) return { status: 'error', message: 'Department not found or not in your company.' };
+    return { status: 'success', message: 'Department updated.' };
+  } catch (error) {
+    console.error('Update department failed:', error);
+    return { status: 'error', message: 'Department could not be updated.' };
+  }
+}
+
+export async function deleteDepartment(
+  prevState: DepartmentState = defaultDepartmentState,
+  formData: FormData,
+): Promise<DepartmentState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing department id.' };
+
+    const res = await sql.begin(async (trx) => {
+      const del = await trx`DELETE FROM departments WHERE id=${id} AND company_id=${companyId}`;
+      if (del.count === 0) return del;
+      // Remove this department id from any employees that reference it.
+      await trx`
+        UPDATE employees
+        SET departments = array_remove(departments, ${id})
+        WHERE company_id = ${companyId} AND departments @> ARRAY[${id}]::text[]
+      `;
+      return del;
+    });
+    if (res.count === 0) return { status: 'error', message: 'Department not found or not in your company.' };
+    return { status: 'success', message: 'Department deleted.' };
+  } catch (error) {
+    console.error('Delete department failed:', error);
+    return { status: 'error', message: 'Department could not be deleted.' };
+  }
+}
+
 const PlanningTimeSchema = z.object({
   name: z.string().min(2, 'Name is required'),
   startDay: z.string().optional(),
@@ -467,7 +671,7 @@ const defaultPlanningTimeState: PlanningTimeState = { status: 'idle', message: u
 export async function createPlanningTime(
   prevState: PlanningTimeState = defaultPlanningTimeState,
   formData: FormData,
-) {
+): Promise<PlanningTimeState> {
   try {
     const session = await ensureAuthenticated();
     const userId = (session.user as { id?: string } | undefined)?.id;
@@ -530,7 +734,90 @@ export async function createPlanningTime(
   }
 }
 
-export async function setPlanningTimeDefault(prevState: PlanningTimeState = defaultPlanningTimeState, formData: FormData) {
+export async function updatePlanningTime(
+  prevState: PlanningTimeState = defaultPlanningTimeState,
+  formData: FormData,
+): Promise<PlanningTimeState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing planning id.' };
+
+    const parsed = PlanningTimeSchema.safeParse({
+      name: formData.get('name'),
+      startDay: formData.get('startDay'),
+      endDay: formData.get('endDay'),
+      hoursText: formData.get('hoursText'),
+      startTime: formData.get('startTime'),
+      endTime: formData.get('endTime'),
+      notes: formData.get('notes'),
+      isDefault: formData.get('isDefault'),
+    });
+    if (!parsed.success) {
+      return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
+    }
+    const { name, startDay, endDay, hoursText, startTime, endTime, notes, isDefault } = parsed.data;
+
+    await sql.begin(async (trx) => {
+      if (isDefault) {
+        await trx`UPDATE planning_times SET is_default = FALSE WHERE company_id = ${companyId}`;
+      }
+      const updated = await trx`
+        UPDATE planning_times
+        SET name=${name},
+            start_day=${startDay ?? null},
+            end_day=${endDay ?? null},
+            hours_text=${hoursText ?? null},
+            start_time=${startTime ?? null},
+            end_time=${endTime ?? null},
+            notes=${notes ?? null},
+            is_default=${!!isDefault}
+        WHERE id=${id} AND company_id=${companyId}
+        RETURNING id
+      `;
+      if (updated.count === 0) throw new Error('Planning not found');
+    });
+
+    return { status: 'success', message: 'Planning time updated.' };
+  } catch (error) {
+    console.error('Update planning time failed:', error);
+    return { status: 'error', message: 'Planning time could not be updated.' };
+  }
+}
+
+export async function deletePlanningTime(
+  prevState: PlanningTimeState = defaultPlanningTimeState,
+  formData: FormData,
+): Promise<PlanningTimeState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing planning id.' };
+
+    const res = await sql`DELETE FROM planning_times WHERE id=${id} AND company_id=${companyId}`;
+    if (res.count === 0) return { status: 'error', message: 'Planning not found or not in your company.' };
+    return { status: 'success', message: 'Planning time deleted.' };
+  } catch (error) {
+    console.error('Delete planning time failed:', error);
+    return { status: 'error', message: 'Planning time could not be deleted.' };
+  }
+}
+
+export async function setPlanningTimeDefault(
+  prevState: PlanningTimeState = defaultPlanningTimeState,
+  formData: FormData,
+): Promise<PlanningTimeState> {
   try {
     const session = await ensureAuthenticated();
     const userId = (session.user as { id?: string } | undefined)?.id;
@@ -627,5 +914,26 @@ export async function createAdminUser(
   } catch (error) {
     console.error('Create admin user failed:', error);
     return { status: 'error', message: 'Admin user could not be created.' };
+  }
+}
+
+export async function deleteAdminUser(prevState: AdminUserState, formData: FormData): Promise<AdminUserState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const targetUserId = String(formData.get('userId') ?? '');
+    if (!targetUserId) return { status: 'error', message: 'Missing admin user id.' };
+
+    const res = await sql`DELETE FROM company_admins WHERE company_id=${companyId} AND user_id=${targetUserId}`;
+    if (res.count === 0) return { status: 'error', message: 'Admin not found for this company.' };
+
+    return { status: 'success', message: 'Admin removed.' };
+  } catch (error) {
+    console.error('Delete admin failed:', error);
+    return { status: 'error', message: 'Admin could not be removed.' };
   }
 }

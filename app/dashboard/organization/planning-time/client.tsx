@@ -1,12 +1,11 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useActionState } from 'react';
 import type { PlanningTime } from '@/app/lib/definitions';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import PlanningTimeForm from './form';
 import clsx from 'clsx';
-import { setPlanningTimeDefault, type PlanningTimeState } from '@/app/lib/actions';
-import { useFormState } from 'react-dom';
+import { deletePlanningTime, setPlanningTimeDefault, type PlanningTimeState } from '@/app/lib/actions';
 import { useRouter } from 'next/navigation';
 
 export default function PlanningTimeClient({ items }: { items: PlanningTime[] }) {
@@ -14,17 +13,26 @@ export default function PlanningTimeClient({ items }: { items: PlanningTime[] })
   const [selectedId, setSelectedId] = useState(sorted[0]?.id);
   const selected = sorted.find((p) => p.id === selectedId) ?? sorted[0];
   const [showCreate, setShowCreate] = useState(false);
-  const [defaultState, setDefaultAction] = useFormState(setPlanningTimeDefault, {
+  const [showEdit, setShowEdit] = useState(false);
+  const [defaultState, setDefaultAction] = useActionState<PlanningTimeState, FormData>(setPlanningTimeDefault, {
     status: 'idle',
     message: undefined,
-  } as PlanningTimeState);
+  });
+  const [deleteState, deleteAction] = useActionState<PlanningTimeState, FormData>(deletePlanningTime, {
+    status: 'idle',
+    message: undefined,
+  });
   const router = useRouter();
 
   useEffect(() => {
-    if (defaultState.status === 'success') {
+    if (defaultState.status === 'success' || deleteState.status === 'success') {
+      setShowEdit(false);
+      if (deleteState.status === 'success') {
+        setSelectedId(sorted[0]?.id);
+      }
       router.refresh();
     }
-  }, [defaultState.status, router]);
+  }, [defaultState.status, deleteState.status, router, sorted]);
 
   return (
     <div className="space-y-6">
@@ -100,6 +108,29 @@ export default function PlanningTimeClient({ items }: { items: PlanningTime[] })
                     </button>
                   </form>
                 )}
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEdit(true)}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+                  >
+                    Edit
+                  </button>
+                  <form
+                    action={async (formData) => {
+                      if (!selected) return;
+                      formData.set('id', selected.id);
+                      await deleteAction(formData);
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-400/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-red-200 transition hover:border-red-300 hover:text-white"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
@@ -135,6 +166,41 @@ export default function PlanningTimeClient({ items }: { items: PlanningTime[] })
             <h3 className={`${spaceGrotesk.className} text-2xl font-semibold text-white`}>New planning block</h3>
             <div className="mt-4">
               <PlanningTimeForm onSuccess={() => setShowCreate(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showEdit && selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
+            <button
+              type="button"
+              onClick={() => setShowEdit(false)}
+              className="absolute right-4 top-4 text-white/60 hover:text-white"
+            >
+              ✕
+            </button>
+            <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.4em] text-white/60`}>Edit planning</p>
+            <h3 className={`${spaceGrotesk.className} text-2xl font-semibold text-white`}>Update planning block</h3>
+            <div className="mt-4">
+              <PlanningTimeForm
+                onSuccess={() => {
+                  setShowEdit(false);
+                  router.refresh();
+                }}
+                initialValues={{
+                  id: selected.id,
+                  name: selected.name,
+                  startTime: selected.start_time,
+                  endTime: selected.end_time,
+                  startDay: selected.start_day,
+                  endDay: selected.end_day,
+                  hoursText: selected.hours_text,
+                  notes: selected.notes,
+                  isDefault: selected.is_default,
+                }}
+              />
             </div>
           </div>
         </div>

@@ -73,7 +73,7 @@ export default function NavLinks() {
                 className={clsx(
                   'flex h-[48px] items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white',
                   {
-                    'border-[#d2ff00] bg-black/20 text-white': active || activeChild,
+                    'border-[#d2ff00] bg-[#d2ff00]/10 text-white shadow-[0_0_0_1px_#d2ff00]': active || activeChild,
                   },
                 )}
               >
@@ -93,7 +93,7 @@ export default function NavLinks() {
                 className={clsx(
                   'flex h-[48px] items-center gap-3 rounded-2xl border border-white/10 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white',
                   {
-                    'border-[#d2ff00] bg-black/20 text-white': active,
+                    'border-[#d2ff00] bg-[#d2ff00]/10 text-white shadow-[0_0_0_1px_#d2ff00]': active,
                   },
                 )}
               >
@@ -110,11 +110,18 @@ export default function NavLinks() {
                       key={child.name}
                       href={child.href}
                       className={clsx(
-                        'flex h-[38px] items-center gap-2 rounded-xl border border-white/5 px-4 text-xs font-semibold uppercase tracking-[0.2em] text-white/60 transition hover:border-[#d2ff00] hover:text-white',
-                        { 'border-[#d2ff00] bg-black/10 text-white': childActive },
+                        'group flex h-[38px] items-center gap-2 rounded-xl border border-white/5 px-4 text-xs font-semibold uppercase tracking-[0.2em] text-white/60 transition hover:border-[#d2ff00] hover:text-white',
+                        {
+                          'border-[#d2ff00] bg-[#d2ff00]/10 text-white shadow-[0_0_0_1px_#d2ff00]': childActive,
+                        },
                       )}
                     >
-                      <span>{child.name}</span>
+                      <span
+                        className={clsx('h-1.5 w-1.5 rounded-full bg-white/30 transition', {
+                          'bg-[#d2ff00]': childActive,
+                        })}
+                      />
+                      <span className="truncate">{child.name}</span>
                     </Link>
                   );
                 })}

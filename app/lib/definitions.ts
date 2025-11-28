@@ -29,8 +29,12 @@ export type Department = {
   company_id: string;
   name: string;
   description: string | null;
-  roles: number | null;
-  members: number | null;
+  roles?: number | null;
+  members?: number | null;
+  // Derived stats for detail view
+  members_count?: number | null;
+  schedules_count?: number | null;
+  hourly_cost?: number | null;
 };
 
 export type PlanningTime = {
