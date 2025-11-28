@@ -1,7 +1,6 @@
 'use server';
 
 import { z } from 'zod';
-import postgres from 'postgres';
 import { auth, signIn } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { AuthError } from 'next-auth';
@@ -9,14 +8,8 @@ import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import type { User } from '@/app/lib/definitions';
 import { redirect } from 'next/navigation';
+import sql from './db';
  
-const sql = (() => {
-  if (!process.env.POSTGRES_URL) {
-    throw new Error('Missing POSTGRES_URL environment variable');
-  }
-  return postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
-})();
-
 let shiftsEnsured = true; // schema should be created via migration; skip runtime DDL
 
 const SignupSchema = z.object({
@@ -241,11 +234,20 @@ const EmployeeSchema = z.object({
   salaryHourly: z.coerce.number().min(0, 'Salary must be positive'),
   password: z.string().min(8, 'Password must be at least 8 characters').optional(),
   locationId: z.string().optional(),
+  locationIds: z.string().optional(), // comma separated
 });
 
 async function ensureShiftsTable() {
   // No-op: schema should be managed via migrations. Kept to avoid runtime notices.
   return;
+}
+
+async function ensureEmployeeLocationArray() {
+  try {
+    await sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_ids text[]`;
+  } catch (err) {
+    console.error('ensureEmployeeLocationArray failed', err);
+  }
 }
 
 const ShiftSchema = z.object({
@@ -285,21 +287,42 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     startTime: formData.get('startTime'),
     endTime: formData.get('endTime'),
     notes: formData.get('notes'),
+    breakMinutes: formData.get('breakMinutes'),
   });
-  if (!parsed.success) return null;
+  
+  if (!parsed.success) {
+    console.error('Shift validation failed:', parsed.error);
+    return null;
+  }
 
   const { planningId, locationId, employeeId, date, startTime, endTime, notes, breakMinutes } = parsed.data;
-  if (endTime <= startTime) return null;
+  
+  if (endTime <= startTime) {
+    console.error('End time must be after start time');
+    return null;
+  }
 
   try {
     await ensureShiftsTable();
+    
+    // Ensure date is in YYYY-MM-DD format
+    const normalizedDate = date.includes('T') ? date.split('T')[0] : date;
+    
     const inserted = await sql<CreatedShift[]>`
       INSERT INTO shifts (company_id, location_id, planning_id, employee_id, date, start_time, end_time, break_minutes, notes)
-      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${date}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
-      RETURNING id, employee_id, date, start_time, end_time, break_minutes, notes
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${normalizedDate}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
+      RETURNING id, employee_id, date::text as date, start_time, end_time, break_minutes, notes
     `;
+    
     if (path) revalidatePath(path);
-    return inserted[0] ?? null;
+    
+    const result = inserted[0] ?? null;
+    
+    if (result) {
+      console.log('Shift created:', result);
+    }
+    
+    return result;
   } catch (err) {
     console.error('Create shift failed:', err);
     return null;
@@ -381,10 +404,9 @@ export async function createEmployee(
         const val = typeof raw === 'string' ? raw.trim() : '';
         return val.length > 0 ? val : undefined;
       })(),
-      locationId: (() => {
-        const raw = formData.get('locationId');
-        const val = typeof raw === 'string' ? raw.trim() : '';
-        return val.length > 0 ? val : undefined;
+      locationIds: (() => {
+        const raw = formData.get('locationIds');
+        return typeof raw === 'string' ? raw : '';
       })(),
     });
 
@@ -403,7 +425,7 @@ export async function createEmployee(
       skills,
       salaryHourly,
       password,
-      locationId,
+      locationIds,
     } = parsed.data;
 
     const departmentList =
@@ -418,6 +440,12 @@ export async function createEmployee(
         .filter(Boolean) ?? [];
 
     const salaryCents = Math.round((salaryHourly ?? 0) * 100);
+    const locationList =
+      locationIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean) ?? [];
+    const primaryLocation = locationList[0] ?? null;
 
     // Enforce seat limits before creating the employee.
     const companyPlan = await sql<{ seat_limit: number | null; plan: string | null }[]>`
@@ -435,6 +463,8 @@ export async function createEmployee(
         message: `Seat limit reached for this plan (${seatLimit}). Remove users or upgrade the plan.`,
       };
     }
+
+    await ensureEmployeeLocationArray();
 
     let linkedUserId: string | null = null;
     if (password) {
@@ -463,7 +493,8 @@ export async function createEmployee(
       skills,
       salary_cents,
       user_id,
-      location_id
+      location_id,
+      location_ids
     )
     VALUES (
       ${companyId},
@@ -477,7 +508,8 @@ export async function createEmployee(
       ${skillsList},
       ${salaryCents},
       ${linkedUserId},
-      ${locationId ?? null}
+      ${primaryLocation},
+      ${locationList}
     )
     `;
 
@@ -521,10 +553,9 @@ export async function updateEmployee(
         const val = typeof raw === 'string' ? raw.trim() : '';
         return val.length > 0 ? val : undefined;
       })(),
-      locationId: (() => {
-        const raw = formData.get('locationId');
-        const val = typeof raw === 'string' ? raw.trim() : '';
-        return val.length > 0 ? val : undefined;
+      locationIds: (() => {
+        const raw = formData.get('locationIds');
+        return typeof raw === 'string' ? raw : '';
       })(),
     });
 
@@ -532,8 +563,19 @@ export async function updateEmployee(
       return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
     }
 
-    const { name, email, phone, contractType, hoursPerWeek, role, departments, skills, salaryHourly, password, locationId } =
-      parsed.data;
+    const {
+      name,
+      email,
+      phone,
+      contractType,
+      hoursPerWeek,
+      role,
+      departments,
+      skills,
+      salaryHourly,
+      password,
+      locationIds,
+    } = parsed.data;
     const departmentList =
       departments
         ?.split(',')
@@ -545,6 +587,12 @@ export async function updateEmployee(
         .map((s) => s.trim())
         .filter(Boolean) ?? [];
     const salaryCents = Math.round((salaryHourly ?? 0) * 100);
+    const locationList =
+      locationIds
+        ?.split(',')
+        .map((id) => id.trim())
+        .filter(Boolean) ?? [];
+    const primaryLocation = locationList[0] ?? null;
 
     let linkedUserId: string | null = null;
     if (password) {
@@ -560,6 +608,8 @@ export async function updateEmployee(
       }
     }
 
+    await ensureEmployeeLocationArray();
+
     const updated = await sql`
       UPDATE employees
       SET name=${name},
@@ -572,7 +622,8 @@ export async function updateEmployee(
           skills=${skillsList},
           salary_cents=${salaryCents},
           user_id=${linkedUserId ?? null},
-          location_id=${locationId ?? null}
+          location_id=${primaryLocation},
+          location_ids=${locationList}
       WHERE id=${id} AND company_id=${companyId}
       RETURNING id
     `;

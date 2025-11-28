@@ -38,6 +38,7 @@ export default function EmployeeForm({
     departments?: string[] | null;
     skills?: string[] | null;
     locationId?: string | null;
+    locationIds?: string[] | null;
   };
 }) {
   const actionFn = initialValues?.id ? updateEmployee : createEmployee;
@@ -47,15 +48,21 @@ export default function EmployeeForm({
   const formRef = useRef<HTMLFormElement>(null);
   const router = useRouter();
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>(initialValues?.departments ?? []);
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(
-    initialValues?.locationId ?? locations[0]?.id ?? '',
-  );
+  const initialLocationSelection =
+    initialValues?.locationIds && initialValues.locationIds.length > 0
+      ? initialValues.locationIds
+      : initialValues?.locationId
+        ? [initialValues.locationId]
+        : locations[0]?.id
+          ? [locations[0].id]
+          : [];
+  const [selectedLocations, setSelectedLocations] = useState<string[]>(initialLocationSelection);
 
   useEffect(() => {
     if (state.status === 'success') {
       formRef.current?.reset();
       setSelectedDepartments([]);
-      setSelectedLocationId(locations[0]?.id ?? '');
+      setSelectedLocations(locations[0]?.id ? [locations[0].id] : []);
       router.refresh();
       onSuccess?.();
     }
@@ -144,11 +151,10 @@ export default function EmployeeForm({
         />
         <div className="space-y-4">
           <LocationSelect
-            label="Location (required)"
-            name="locationId"
+            label="Locations (select one or more)"
             options={locations}
-            selected={selectedLocationId}
-            onChange={setSelectedLocationId}
+            selected={selectedLocations}
+            onChange={setSelectedLocations}
           />
           <Field
             label="Skills (comma separated)"
@@ -159,6 +165,7 @@ export default function EmployeeForm({
         </div>
       </div>
       <input type="hidden" name="departments" value={selectedDepartments.join(',')} />
+      <input type="hidden" name="locationIds" value={selectedLocations.join(',')} />
 
       <button
         type="submit"
@@ -298,17 +305,23 @@ function DepartmentSelect({
 
 function LocationSelect({
   label,
-  name,
   options,
   selected,
   onChange,
 }: {
   label: string;
-  name: string;
   options: { id: string; name: string }[];
-  selected: string;
-  onChange: (id: string) => void;
+  selected: string[];
+  onChange: (ids: string[]) => void;
 }) {
+  const toggle = (id: string) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter((s) => s !== id));
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
   return (
     <div className="space-y-2 text-sm text-white/80">
       <span className={`${plusJakarta.className} block text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
@@ -320,9 +333,9 @@ function LocationSelect({
           <button
             type="button"
             key={opt.id}
-            onClick={() => onChange(opt.id)}
+            onClick={() => toggle(opt.id)}
             className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] transition ${
-              selected === opt.id
+              selected.includes(opt.id)
                 ? 'border-[#d2ff00] bg-[#d2ff00]/10 text-white'
                 : 'border-white/20 bg-white/5 text-white/70 hover:border-[#d2ff00] hover:text-white'
             }`}
@@ -331,7 +344,6 @@ function LocationSelect({
           </button>
         ))}
       </div>
-      <input type="hidden" name={name} value={selected} />
     </div>
   );
 }

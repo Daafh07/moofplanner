@@ -11,6 +11,7 @@ import {
 } from '@/app/lib/data';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import PlannerBoardClient from './board-client';
+import Link from 'next/link';
 
 function parseSchedule(hoursText: string | null) {
   try {
@@ -53,9 +54,25 @@ function durationHours(start: string, end: string) {
   return Math.max(mins, 0) / 60;
 }
 
+function formatWeekRangeLabel(weekDates: string[]) {
+  if (!weekDates.length) return '';
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+    const start = formatter.format(new Date(weekDates[0]));
+    const end = formatter.format(new Date(weekDates[weekDates.length - 1]));
+    return `${start} – ${end}`;
+  } catch {
+    return '';
+  }
+}
+
 export const metadata: Metadata = {
   title: 'Planner · Board',
 };
+
+// Force dynamic rendering to always fetch fresh data
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function PlannerBoardPage({
   params,
@@ -66,6 +83,7 @@ export default async function PlannerBoardPage({
   const session = await auth();
   if (!session?.user) redirect('/login');
   const userId = (session.user as { id?: string } | undefined)?.id;
+  
   const [locations, planning, employees, departments, shifts] = await Promise.all([
     userId ? fetchLocationsByUser(userId) : [],
     userId ? fetchPlanningTimesByUser(userId) : [],
@@ -78,12 +96,16 @@ export default async function PlannerBoardPage({
   const plan = planning.find(
     (p) => p.id === resolvedParams.planId && p.location_id === resolvedParams.locationId,
   );
+  
   if (!location || !plan) {
     redirect('/dashboard/planner');
   }
 
   const schedule = parseSchedule(plan.hours_text);
-  const locationEmployees = employees.filter((e) => e.location_id === location.id);
+  const locationEmployees = employees.filter((e) => {
+    const list = e.location_ids ?? [];
+    return e.location_id === location.id || list.includes(location.id);
+  });
   const dayRanges = schedule.map((s) => ({
     day: s.day,
     start: s.start ?? '',
@@ -91,8 +113,10 @@ export default async function PlannerBoardPage({
     closed: !!s.closed || !s.start || !s.end,
     range: s.start && s.end ? `${s.start} – ${s.end}` : 'Closed',
   }));
+  
   const dayLabels = dayRanges.map((d) => d.day);
   const weekDates = buildWeekDates(dayLabels);
+  
   const deptEmployees = departments
     .map((dept) => ({
       dept,
@@ -101,23 +125,56 @@ export default async function PlannerBoardPage({
         .map((e) => ({
           id: e.id,
           name: e.name,
-          hours_per_week: e.hours_per_week ?? undefined,
+          hours_per_week: e.hours_per_week ?? 0,
         })),
     }))
     .filter((d) => d.emps.length > 0);
 
-  return (
-    <main className="space-y-6 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.5em] text-white/60`}>Planner</p>
-          <h1 className={`${spaceGrotesk.className} text-3xl font-semibold`}>
-            {location.name} · {plan.name}
-          </h1>
-        </div>
-      </div>
+  const weekRangeLabel = formatWeekRangeLabel(weekDates);
 
-      <section className="rounded-3xl border border-white/10 bg-black/25 p-4">
+  return (
+    <main className="space-y-8 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
+      <header className="flex flex-col gap-3 rounded-[28px] border border-white/10 bg-black/20 px-6 py-5 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1">
+          <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.5em] text-white/60`}>Planner</p>
+          <h1 className={`${spaceGrotesk.className} text-3xl font-semibold`}>{location.name}</h1>
+          <p className="text-sm text-white/70">
+            {plan.name}
+            {weekRangeLabel ? ` · Week ${weekRangeLabel}` : ''}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/dashboard/planner"
+            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+          >
+            All locations
+          </Link>
+          <Link
+            href={`/dashboard/planner/${location.id}`}
+            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+          >
+            Change plan
+          </Link>
+        </div>
+      </header>
+
+      <section className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <p className={`${plusJakarta.className} text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
+              Shift board
+            </p>
+            <h2 className={`${spaceGrotesk.className} text-xl font-semibold text-white`}>
+              {weekRangeLabel ? `Week ${weekRangeLabel}` : 'Current week'}
+            </h2>
+            <p className="text-sm text-white/60">Manage shifts per employee for this planning block.</p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-white/70">
+            {deptEmployees.length} departments · {locationEmployees.length} employees
+          </div>
+        </div>
+
         <PlannerBoardClient
           dayRanges={dayRanges}
           weekDates={weekDates}

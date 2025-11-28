@@ -23,6 +23,7 @@ export type Employee = {
   salary_cents: number | null;
   user_id?: string | null;
   location_id?: string | null;
+  location_ids?: string[] | null;
 };
 
 export type Department = {

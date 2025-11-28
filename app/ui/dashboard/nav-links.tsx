@@ -71,18 +71,22 @@ export default function NavLinks() {
                   setOpen((prev) => ({ ...prev, [link.href]: !(prev[link.href] ?? activeChild) }))
                 }
                 className={clsx(
-                  'flex h-[48px] items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white',
+                  'flex h-[48px] items-center justify-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white md:h-[56px] md:w-[56px] md:px-0 md:gap-0 md:transition-[width,padding,gap] md:duration-200 md:group-hover/nav:w-full md:group-hover/nav:justify-between md:group-hover/nav:px-4 md:group-hover/nav:gap-3',
                   {
                     'border-[#d2ff00] bg-[#d2ff00]/10 text-white shadow-[0_0_0_1px_#d2ff00]': active || activeChild,
                   },
                 )}
               >
-                <span className="flex items-center gap-3">
-                  {LinkIcon ? <LinkIcon className="w-5" /> : null}
-                  {link.name}
-                </span>
+                <div className="flex w-full items-center justify-center md:group-hover/nav:justify-start md:group-hover/nav:gap-3">
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    {LinkIcon ? <LinkIcon className="w-5" /> : null}
+                  </span>
+                  <span className="md:max-w-0 md:overflow-hidden md:opacity-0 md:group-hover/nav:max-w-xs md:group-hover/nav:opacity-100 md:transition-[max-width,opacity] md:duration-200">
+                    {link.name}
+                  </span>
+                </div>
                 <ChevronDownIcon
-                  className={clsx('w-4 transition-transform', {
+                  className={clsx('hidden w-4 transition-all md:group-hover/nav:block', {
                     'rotate-180': showChildren,
                   })}
                 />
@@ -91,18 +95,24 @@ export default function NavLinks() {
               <Link
                 href={link.href}
                 className={clsx(
-                  'flex h-[48px] items-center gap-3 rounded-2xl border border-white/10 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white',
+                  'flex h-[48px] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold uppercase tracking-[0.3em] text-white/70 transition hover:border-[#d2ff00] hover:text-white md:h-[56px] md:w-[56px] md:justify-center md:px-0 md:transition-[width,padding,gap] md:duration-200 md:group-hover/nav:w-full md:group-hover/nav:justify-start md:group-hover/nav:px-4',
                   {
                     'border-[#d2ff00] bg-[#d2ff00]/10 text-white shadow-[0_0_0_1px_#d2ff00]': active,
                   },
                 )}
               >
-                {LinkIcon ? <LinkIcon className="w-5" /> : null}
-                <span>{link.name}</span>
+                <div className="flex w-full items-center justify-center md:group-hover/nav:justify-start md:group-hover/nav:gap-3">
+                  <span className="flex h-5 w-5 items-center justify-center">
+                    {LinkIcon ? <LinkIcon className="w-5" /> : null}
+                  </span>
+                  <span className="md:max-w-0 md:overflow-hidden md:opacity-0 md:group-hover/nav:max-w-xs md:group-hover/nav:opacity-100 md:transition-[max-width,opacity] md:duration-200">
+                    {link.name}
+                  </span>
+                </div>
               </Link>
             )}
             {link.children && showChildren && (
-              <div className="ml-4 flex flex-col gap-1">
+              <div className="ml-4 flex flex-col gap-1 md:hidden md:group-hover/nav:flex">
                 {link.children.map((child) => {
                   const childActive = isActive(pathname, child.href);
                   return (

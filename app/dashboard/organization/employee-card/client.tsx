@@ -142,9 +142,17 @@ export default function EmployeeCardClient({
                     .filter((name): name is string => Boolean(name))}
                 />
                 <ListTile title="Skills" items={selected.skills ?? []} />
-                <DetailTile
-                  title="Location"
-                  value={selected.location_id ? locationNameMap[selected.location_id] ?? selected.location_id : '—'}
+                <ListTile
+                  title="Locations"
+                  items={
+                    (selected.location_ids && selected.location_ids.length > 0
+                      ? selected.location_ids
+                      : selected.location_id
+                        ? [selected.location_id]
+                        : []
+                    )
+                      .map((id) => locationNameMap[id] ?? id)
+                  }
                 />
               </div>
 
@@ -215,6 +223,7 @@ export default function EmployeeCardClient({
                   departments: selected.departments ?? [],
                   skills: selected.skills ?? [],
                   locationId: selected.location_id ?? undefined,
+                  locationIds: selected.location_ids ?? undefined,
                 }}
               />
             </div>

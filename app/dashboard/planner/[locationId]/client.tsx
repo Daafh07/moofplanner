@@ -32,7 +32,10 @@ export default function PlannerLocationClient({
   const [selectedId, setSelectedId] = useState(defaultPlan?.id ?? plans[0]?.id ?? null);
   const selected = plans.find((p) => p.id === selectedId) ?? defaultPlan ?? null;
   const schedule = selected ? parseSchedule(selected.hours_text) : [];
-  const locationEmployees = employees.filter((e) => e.location_id === location.id);
+  const locationEmployees = employees.filter((e) => {
+    const list = e.location_ids ?? [];
+    return e.location_id === location.id || list.includes(location.id);
+  });
   const departmentMap = useMemo(() => Object.fromEntries(departments.map((d) => [d.id, d.name])), [departments]);
 
   return (

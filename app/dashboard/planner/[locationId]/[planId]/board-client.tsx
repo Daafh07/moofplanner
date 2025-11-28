@@ -3,9 +3,10 @@
 import { Fragment, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createShift, deleteShift } from '@/app/lib/actions';
+import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 
 type DayRange = { day: string; start: string; end: string; closed: boolean; range: string };
-type DeptEmp = { dept: { id: string; name: string }; emps: { id: string; name: string; hours_per_week?: number }[] };
+type DeptEmp = { dept: { id: string; name: string }; emps: { id: string; name: string; hours_per_week: number }[] };
 type Shift = {
   id: string;
   employee_id: string;
@@ -29,6 +30,7 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
   const [localShifts, setLocalShifts] = useState<Shift[]>(shifts);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  
   const shiftsByEmp = useMemo(() => {
     const map: Record<string, Shift[]> = {};
     localShifts.forEach((s) => {
@@ -52,59 +54,85 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
   }>({ open: false, employeeId: '', date: '', start: '', end: '' });
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full border-collapse text-sm">
-        <thead>
+    <div className="overflow-auto rounded-2xl bg-black/20 ring-1 ring-white/10">
+      <table className="min-w-full border-collapse text-sm text-white">
+        <thead className="bg-black/30">
           <tr className="border-b border-white/10">
-            <th className="w-48 px-3 py-2 text-left text-xs uppercase tracking-[0.3em] text-white/60">Department / Employee</th>
-                {dayRanges.map((d, idx) => (
-                  <th key={d.day} className="px-3 py-2 text-left text-xs uppercase tracking-[0.3em] text-white/60">
-                    <div className="flex flex-col">
-                      <span>{d.day}</span>
-                      <span className="text-[0.65rem] text-white/40">{weekDates[idx]}</span>
-                      <span className="mt-1 text-[0.65rem] font-normal text-white/50">{d.closed ? 'Closed' : d.range}</span>
-                    </div>
-                  </th>
-                ))}
-            <th className="px-3 py-2 text-left text-xs uppercase tracking-[0.3em] text-white/60">Total hours</th>
+            <th
+              className={`w-52 px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+            >
+              Department / Employee
+            </th>
+            {dayRanges.map((d, idx) => (
+              <th
+                key={d.day}
+                className={`px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+              >
+                <div className="flex flex-col gap-1">
+                  <span>{d.day}</span>
+                  <span className={`${spaceGrotesk.className} text-sm font-semibold text-white`}>
+                    {formatDisplayDate(weekDates[idx])}
+                  </span>
+                  <span className="text-[0.7rem] text-white/50">{d.closed ? 'Closed' : d.range}</span>
+                </div>
+              </th>
+            ))}
+            <th
+              className={`px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+            >
+              Total hours
+            </th>
           </tr>
         </thead>
         <tbody>
           {deptEmployees.map(({ dept, emps }) => (
             <Fragment key={dept.id}>
-              <tr className="border-b border-white/10">
-                <td className="bg-white/5 px-3 py-2 font-semibold text-white" colSpan={dayRanges.length + 2}>
+              <tr className="border-b border-white/10 bg-white/5">
+                <td
+                  className={`${spaceGrotesk.className} px-4 py-3 text-base font-semibold text-white`}
+                  colSpan={dayRanges.length + 2}
+                >
                   {dept.name}
                 </td>
               </tr>
               {emps.map((emp) => (
-                <tr key={emp.id} className="border-b border-white/10">
-                  <td className="px-3 py-2 text-white">{emp.name}</td>
+                <tr key={emp.id} className="border-b border-white/10 transition-colors hover:bg-white/5">
+                  <td className={`${spaceGrotesk.className} px-4 py-3 text-white`}>{emp.name}</td>
                   {dayRanges.map((d, idx) => {
                     const date = weekDates[idx];
-                    const dayShifts = (shiftsByEmp[emp.id] ?? []).filter((s) => normalizeDate(s.date) === normalizeDate(date));
+                    const normalizedDate = normalizeDate(date);
+                    const dayShifts = (shiftsByEmp[emp.id] ?? []).filter((s) => {
+                      const shiftDate = normalizeDate(s.date);
+                      return shiftDate === normalizedDate;
+                    });
+                    
                     return (
-                      <td key={`${emp.id}-${d.day}`} className="px-3 py-2 align-top">
+                      <td key={`${emp.id}-${d.day}`} className="px-4 py-3 align-top">
                         <div
-                          className={`rounded-lg border px-3 py-2 ${
-                            d.closed ? 'border-red-500/40 bg-red-900/30 text-red-200' : 'border-white/10 bg-white/5 text-white'
-                          } space-y-2`}
+                          className={`space-y-2 rounded-xl border px-3 py-2 shadow-sm ${
+                            d.closed ? 'border-red-500/40 bg-red-900/40 text-red-100' : 'border-white/10 bg-white/5 text-white'
+                          }`}
                         >
                           {d.closed ? (
-                            <span>Closed</span>
+                            <span className={`${plusJakarta.className} text-[0.75rem] uppercase tracking-[0.2em]`}>
+                              Closed
+                            </span>
                           ) : (
                             <>
                               <div className="flex flex-col gap-2">
                                 {dayShifts.map((s) => (
-                                  <div key={s.id} className="space-y-1 rounded-md bg-white/10 px-2 py-2 text-xs">
-                                    <div className="flex items-center justify-between">
-                                      <span>
+                                  <div
+                                    key={s.id}
+                                    className="space-y-1 rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-xs"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className={`${spaceGrotesk.className} text-sm font-semibold`}>
                                         {s.start_time}–{s.end_time}
                                         {s.break_minutes ? ` · break ${s.break_minutes}m` : ''}
                                       </span>
                                       <button
                                         type="button"
-                                        className="text-red-300 hover:text-red-200"
+                                        className="inline-flex items-center rounded-full border border-red-300/50 px-2 py-1 text-[0.7rem] font-semibold text-red-200 transition hover:border-red-200 hover:bg-red-200/10"
                                         onClick={() =>
                                           startTransition(async () => {
                                             const fd = new FormData();
@@ -124,7 +152,7 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                                     {s.notes && <p className="text-white/70">{s.notes}</p>}
                                   </div>
                                 ))}
-                                {dayShifts.length === 0 && <p className="text-[0.7rem] text-white/60">No shifts</p>}
+                                {dayShifts.length === 0 && <p className="text-[0.8rem] text-white/60">No shifts</p>}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -136,7 +164,7 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                                       end: d.end || '17:00',
                                     })
                                   }
-                                  className="rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-white hover:bg-white/20"
+                                  className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
                                 >
                                   Add shift
                                 </button>
@@ -147,8 +175,8 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 text-sm text-white">
-                    {sumHoursForEmployee(emp.id).toFixed(1)}h / {(emp.hours_per_week ?? 0).toFixed(1)}h
+                  <td className={`${spaceGrotesk.className} px-4 py-3 text-sm text-white`}>
+                    {sumHoursForEmployee(emp.id).toFixed(1)}h / {Number(emp.hours_per_week ?? 0).toFixed(1)}h
                   </td>
                 </tr>
               ))}
@@ -252,6 +280,15 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
   );
 }
 
+function formatDisplayDate(value: string) {
+  if (!value) return '';
+  try {
+    return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
 function durationHours(start: string, end: string) {
   const [sh, sm] = start.split(':').map(Number);
   const [eh, em] = end.split(':').map(Number);
@@ -259,11 +296,18 @@ function durationHours(start: string, end: string) {
   return Math.max(mins, 0) / 60;
 }
 
-function normalizeDate(value: string | null | undefined) {
+function normalizeDate(value: string | null | undefined): string {
   if (!value) return '';
+  
+  // Handle string values
   if (typeof value === 'string') {
-    return value.includes('T') ? value.split('T')[0] : value;
+    // Remove time component if present
+    const dateOnly = value.includes('T') ? value.split('T')[0] : value;
+    // Ensure format is YYYY-MM-DD
+    return dateOnly.trim();
   }
+  
+  // Fallback for any other type
   try {
     const cast = String(value);
     return cast.includes('T') ? cast.split('T')[0] : cast;

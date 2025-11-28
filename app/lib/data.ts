@@ -1,8 +1,6 @@
-import postgres from 'postgres';
 import { Revenue, Employee, Department, PlanningTime, AdminUser, Location } from './definitions';
 import { formatCurrency } from './utils';
-
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+import sql from './db';
 
 type CompanySnapshot = {
   id: string;

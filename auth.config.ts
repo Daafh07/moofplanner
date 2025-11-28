@@ -1,23 +1,22 @@
 import type { NextAuthConfig } from 'next-auth';
 import { NextResponse } from 'next/server';
-import postgres from 'postgres';
+import sql from '@/app/lib/db';
 
 const secret = process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
 if (!secret) {
   throw new Error('NEXTAUTH_SECRET (or AUTH_SECRET) must be set for authentication to work securely.');
 }
 
-const sql =
-  typeof process.env.POSTGRES_URL === 'string'
-    ? postgres(process.env.POSTGRES_URL, { ssl: 'require' })
-    : null;
-
 async function isCompanyAdmin(userId: string) {
-  if (!sql) return false;
-  const rows = await sql<{ company_id: string }[]>`
-    SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
-  `;
-  return rows.length > 0;
+  try {
+    const rows = await sql<{ company_id: string }[]>`
+      SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+    `;
+    return rows.length > 0;
+  } catch (err) {
+    console.error('isCompanyAdmin query failed', err);
+    return false;
+  }
 }
 
 export const authConfig = {
@@ -40,13 +39,17 @@ export const authConfig = {
       let isAdmin = false;
       let companyId: string | null = null;
       const userId = user?.id ?? token.sub;
-      if (userId && sql) {
-        const rows = await sql<{ company_id: string }[]>`
-          SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
-        `;
-        if (rows.length > 0) {
-          isAdmin = true;
-          companyId = rows[0].company_id;
+      if (userId) {
+        try {
+          const rows = await sql<{ company_id: string }[]>`
+            SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+          `;
+          if (rows.length > 0) {
+            isAdmin = true;
+            companyId = rows[0].company_id;
+          }
+        } catch (err) {
+          console.error('jwt company lookup failed', err);
         }
       }
       (token as { isAdmin?: boolean }).isAdmin = isAdmin;
