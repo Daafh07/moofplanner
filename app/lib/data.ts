@@ -92,17 +92,23 @@ export async function fetchPendingApprovals() {
 }
 
 export async function fetchUpcomingEvents() {
-  const data = await sql<{ id: string; title: string; event_date: string; attendees: number }[]>`
-    SELECT id, title, event_date, attendees
-    FROM events
-    ORDER BY event_date ASC
-    LIMIT 3
-  `;
-  return data.map((event) => ({
-    label: event.title,
-    day: new Date(event.event_date).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }),
-    people: event.attendees,
-  }));
+  // If the events table does not exist, return an empty list without failing.
+  try {
+    const data = await sql<{ id: string; title: string; event_date: string; attendees: number }[]>`
+      SELECT id, title, event_date, attendees
+      FROM events
+      ORDER BY event_date ASC
+      LIMIT 3
+    `;
+    return data.map((event) => ({
+      label: event.title,
+      day: new Date(event.event_date).toLocaleDateString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short' }),
+      people: event.attendees,
+    }));
+  } catch (err) {
+    console.warn('events table missing or unreadable, returning empty events list');
+    return [];
+  }
 }
 
 export async function fetchOrganizationCards(userId?: string) {
