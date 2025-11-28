@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import postgres from 'postgres';
 import { auth, signIn } from '@/auth';
+import { revalidatePath } from 'next/cache';
 import { AuthError } from 'next-auth';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
@@ -15,7 +16,9 @@ const sql = (() => {
   }
   return postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 })();
- 
+
+let shiftsEnsured = true; // schema should be created via migration; skip runtime DDL
+
 const SignupSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
   email: z.string().email('Valid email required'),
@@ -239,6 +242,89 @@ const EmployeeSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters').optional(),
   locationId: z.string().optional(),
 });
+
+async function ensureShiftsTable() {
+  // No-op: schema should be managed via migrations. Kept to avoid runtime notices.
+  return;
+}
+
+const ShiftSchema = z.object({
+  planningId: z.string().uuid(),
+  locationId: z.string().uuid(),
+  employeeId: z.string().uuid(),
+  date: z.string().min(8),
+  startTime: z.string().min(4),
+  endTime: z.string().min(4),
+  notes: z.string().optional(),
+  breakMinutes: z.coerce.number().optional(),
+});
+
+type CreatedShift = {
+  id: string;
+  employee_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  break_minutes: number | null;
+  notes: string | null;
+};
+
+export async function createShift(formData: FormData): Promise<CreatedShift | null> {
+  const session = await ensureAuthenticated();
+  const userId = (session.user as { id?: string } | undefined)?.id;
+  if (!userId) return null;
+  const companyId = await getCompanyIdForUser(userId);
+  if (!companyId) return null;
+  const path = typeof formData.get('path') === 'string' ? (formData.get('path') as string) : '';
+
+  const parsed = ShiftSchema.safeParse({
+    planningId: formData.get('planningId'),
+    locationId: formData.get('locationId'),
+    employeeId: formData.get('employeeId'),
+    date: formData.get('date'),
+    startTime: formData.get('startTime'),
+    endTime: formData.get('endTime'),
+    notes: formData.get('notes'),
+  });
+  if (!parsed.success) return null;
+
+  const { planningId, locationId, employeeId, date, startTime, endTime, notes, breakMinutes } = parsed.data;
+  if (endTime <= startTime) return null;
+
+  try {
+    await ensureShiftsTable();
+    const inserted = await sql<CreatedShift[]>`
+      INSERT INTO shifts (company_id, location_id, planning_id, employee_id, date, start_time, end_time, break_minutes, notes)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${date}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
+      RETURNING id, employee_id, date, start_time, end_time, break_minutes, notes
+    `;
+    if (path) revalidatePath(path);
+    return inserted[0] ?? null;
+  } catch (err) {
+    console.error('Create shift failed:', err);
+    return null;
+  }
+}
+
+export async function deleteShift(formData: FormData): Promise<boolean> {
+  const session = await ensureAuthenticated();
+  const userId = (session.user as { id?: string } | undefined)?.id;
+  if (!userId) return false;
+  const companyId = await getCompanyIdForUser(userId);
+  if (!companyId) return false;
+  const id = formData.get('id');
+  if (!id || typeof id !== 'string') return false;
+  const path = typeof formData.get('path') === 'string' ? (formData.get('path') as string) : '';
+  try {
+    await ensureShiftsTable();
+    await sql`DELETE FROM shifts WHERE id = ${id} AND company_id = ${companyId}`;
+    if (path) revalidatePath(path);
+    return true;
+  } catch (err) {
+    console.error('Delete shift failed:', err);
+    return false;
+  }
+}
 
 export type EmployeeState = {
   status: 'idle' | 'success' | 'error';

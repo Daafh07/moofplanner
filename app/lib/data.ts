@@ -211,6 +211,35 @@ export async function fetchPlanningTimesByUser(userId: string) {
   }
 }
 
+export type Shift = {
+  id: string;
+  company_id: string;
+  location_id: string;
+  planning_id: string;
+  employee_id: string;
+  date: string; // ISO date
+  start_time: string; // HH:MM
+  end_time: string; // HH:MM
+  notes: string | null;
+  created_at: string;
+};
+
+export async function fetchShiftsByPlanning(planningId?: string) {
+  if (!planningId) return [];
+  try {
+    const rows = await sql<Shift[]>`
+      SELECT *
+      FROM shifts
+      WHERE planning_id = ${planningId}
+      ORDER BY date ASC, start_time ASC
+    `;
+    return rows;
+  } catch (err) {
+    console.error('Database Error:', err);
+    throw new Error('Failed to fetch shifts.');
+  }
+}
+
 export async function fetchAdminsByUser(userId: string) {
   try {
     const admins = await sql<AdminUser[]>`

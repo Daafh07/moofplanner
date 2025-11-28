@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { PlanningTime } from '@/app/lib/definitions';
+import type { PlanningTime, Employee, Department } from '@/app/lib/definitions';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import Link from 'next/link';
 
@@ -20,14 +20,20 @@ function parseSchedule(hoursText: string | null) {
 export default function PlannerLocationClient({
   location,
   plans,
+  employees,
+  departments,
 }: {
   location: LocationData;
   plans: PlanningTime[];
+  employees: Employee[];
+  departments: Department[];
 }) {
   const defaultPlan = useMemo(() => plans.find((p) => p.is_default) ?? plans[0], [plans]);
   const [selectedId, setSelectedId] = useState(defaultPlan?.id ?? plans[0]?.id ?? null);
   const selected = plans.find((p) => p.id === selectedId) ?? defaultPlan ?? null;
   const schedule = selected ? parseSchedule(selected.hours_text) : [];
+  const locationEmployees = employees.filter((e) => e.location_id === location.id);
+  const departmentMap = useMemo(() => Object.fromEntries(departments.map((d) => [d.id, d.name])), [departments]);
 
   return (
     <main className="space-y-8 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
@@ -130,6 +136,17 @@ export default function PlannerLocationClient({
                     );
                   })
                 )}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
+                <div className="text-sm text-white/70">
+                  {locationEmployees.length} employees in this location
+                </div>
+                <Link
+                  href={`/dashboard/planner/${location.id}/${selected.id}`}
+                  className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+                >
+                  Open planner
+                </Link>
               </div>
             </div>
           )}
