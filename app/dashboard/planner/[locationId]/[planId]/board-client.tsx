@@ -113,9 +113,8 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                                             const ok = await deleteShift(fd);
                                             if (ok) {
                                               setLocalShifts((prev) => prev.filter((x) => x.id !== s.id));
-                                            } else {
-                                              router.refresh();
                                             }
+                                            router.refresh();
                                           })
                                         }
                                       >
@@ -180,10 +179,9 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                   const created = await createShift(fd);
                   if (created) {
                     setLocalShifts((prev) => [...prev, created]);
-                  } else {
-                    router.refresh();
                   }
                   setModal((m) => ({ ...m, open: false }));
+                  router.refresh();
                 });
               }}
             >
