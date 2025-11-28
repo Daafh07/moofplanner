@@ -22,10 +22,11 @@ export default async function LoginPage({
     typeof rawCallback === 'string' && rawCallback.startsWith('/') && !rawCallback.startsWith('//')
       ? rawCallback
       : '/dashboard';
+  const message = resolvedSearchParams && 'message' in resolvedSearchParams ? (resolvedSearchParams as any).message : undefined;
 
   return (
     <ProtectedRoute requiresAuth={false} redirectAuthenticatedTo={safeCallback}>
-      <main className="relative min-h-screen overflow-hidden moof-gradient text-white pt-28 sm:pt-32">
+      <main className="relative flex min-h-screen flex-col overflow-hidden moof-gradient text-white">
         <CursorController />
         <nav className="nav-shell nav-shell--top">
           <MoofPlannerLogo compact className="text-white" />
@@ -39,11 +40,12 @@ export default async function LoginPage({
         <div className="hero-noise" />
         <div className="hero-rings" />
 
-        <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-3xl items-center justify-center px-4 py-12">
+        <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 min-h-0 items-center justify-center px-4 py-16">
           <div className="w-full rounded-[56px] bg-gradient-to-br from-[rgba(244,247,224,0.2)] via-[rgba(210,255,0,0.07)] to-transparent p-[5px] shadow-[0_55px_150px_rgba(5,8,4,0.65)]">
-            <div className="rounded-[52px] border border-white/10 bg-[rgba(8,14,9,0.9)] text-white backdrop-blur-[40px]">
+            <div className="max-h-[calc(100vh-220px)] overflow-y-auto rounded-[52px] border border-white/10 bg-[rgba(8,14,9,0.9)] text-white backdrop-blur-[40px]">
               <div className="px-8 py-12 sm:px-16">
-                <Suspense>
+                <Suspense fallback={null}>
+                  {message ? <div className="mb-6 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white/80">{message}</div> : null}
                   <AuthPanel />
                 </Suspense>
               </div>

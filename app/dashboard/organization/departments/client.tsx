@@ -5,15 +5,32 @@ import type { Department } from '@/app/lib/definitions';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import DepartmentForm from './form';
 import clsx from 'clsx';
+import { useActionState, useEffect } from 'react';
+import { deleteDepartment, type DepartmentState } from '@/app/lib/actions';
+import { useRouter } from 'next/navigation';
 
 export default function DepartmentsClient({ departments }: { departments: Department[] }) {
   const sorted = useMemo(
     () => [...departments].sort((a, b) => a.name.localeCompare(b.name)),
     [departments],
   );
-  const [selectedId, setSelectedId] = useState(sorted[0]?.id);
-  const selected = sorted.find((d) => d.id === selectedId) ?? sorted[0];
+  const [selectedId, setSelectedId] = useState<string | null>(sorted[0]?.id ?? null);
+  const selected = selectedId ? sorted.find((d) => d.id === selectedId) : sorted[0];
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [deleteState, deleteAction] = useActionState<DepartmentState, FormData>(deleteDepartment, {
+    status: 'idle',
+    message: undefined,
+  });
+  const router = useRouter();
+
+  useEffect(() => {
+    if (deleteState.status === 'success') {
+      setShowEdit(false);
+      setSelectedId(sorted[0]?.id ?? null);
+      router.refresh();
+    }
+  }, [deleteState.status, router, sorted]);
 
   return (
     <div className="space-y-6">
@@ -65,11 +82,48 @@ export default function DepartmentsClient({ departments }: { departments: Depart
                 </p>
                 <h2 className={`${spaceGrotesk.className} mt-1 text-2xl font-semibold`}>{selected.name}</h2>
                 <p className="text-sm text-white/70">{selected.description ?? 'No description yet.'}</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEdit(true)}
+                    className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+                  >
+                    Edit
+                  </button>
+                  <form
+                    action={async (formData) => {
+                      formData.set('id', selected.id);
+                      await deleteAction(formData);
+                    }}
+                  >
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-400/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-red-200 transition hover:border-red-300 hover:text-white"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </div>
-              <div className="grid gap-4 md:grid-cols-3">
-                <DetailTile title="Roles" value={selected.roles ? `${selected.roles}` : '—'} />
-                <DetailTile title="Members" value={selected.members ? `${selected.members}` : '—'} />
-                <DetailTile title="Schedules" value="—" />
+              <div className="grid gap-4 md:grid-cols-1">
+                <DetailTile
+                  title="Employees"
+                  value={formatStat(selected.members_count ?? selected.members)}
+                />
+                <DetailTile
+                  title="Schedules"
+                  value={formatStat(selected.schedules_count)}
+                />
+                <DetailTile
+                  title="Hourly labor cost (€)"
+                  value={
+                    selected.hourly_cost !== null && selected.hourly_cost !== undefined
+                      ? new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(
+                          selected.hourly_cost,
+                        )
+                      : '—'
+                  }
+                />
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
                 Link employees and approvers to this department to scope access to schedules and reports.
@@ -82,8 +136,8 @@ export default function DepartmentsClient({ departments }: { departments: Depart
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="relative w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
+          <div className="relative mt-10 w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
             <button
               type="button"
               onClick={() => setShowCreate(false)}
@@ -99,6 +153,31 @@ export default function DepartmentsClient({ departments }: { departments: Depart
           </div>
         </div>
       )}
+
+      {showEdit && selected && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
+          <div className="relative mt-10 w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
+            <button
+              type="button"
+              onClick={() => setShowEdit(false)}
+              className="absolute right-4 top-4 text-white/60 hover:text-white"
+            >
+              ✕
+            </button>
+            <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.4em] text-white/60`}>Edit department</p>
+            <h3 className={`${spaceGrotesk.className} text-2xl font-semibold text-white`}>Update department</h3>
+            <div className="mt-4">
+              <DepartmentForm
+                onSuccess={() => {
+                  setShowEdit(false);
+                  router.refresh();
+                }}
+                initialValues={{ id: selected.id, name: selected.name, description: selected.description ?? undefined }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -110,4 +189,9 @@ function DetailTile({ title, value }: { title: string; value: string }) {
       <p className={`${spaceGrotesk.className} mt-1 text-lg font-semibold text-white`}>{value}</p>
     </div>
   );
+}
+
+function formatStat(value?: number | null) {
+  if (value === null || value === undefined) return '—';
+  return value.toLocaleString('nl-NL');
 }

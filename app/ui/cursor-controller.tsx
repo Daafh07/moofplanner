@@ -2,49 +2,79 @@
 
 import { useEffect } from 'react';
 
-const INTERACTIVE_SELECTOR = 'a[href], button, [role="button"], [data-interactive], .cta-primary, .cta-secondary, .plan-button, .menu-button, .nav-overlay__link, .store-pill';
+const INTERACTIVE_SELECTOR =
+  'a[href], button, [role="button"], [data-interactive], .cta-primary, .cta-secondary, .plan-button, .menu-button, .nav-overlay__link, .store-pill';
+const DANGER_SELECTOR = '[data-cursor="danger"]';
 
 export default function CursorController() {
   useEffect(() => {
+    // Smooth follow without jumps.
     let rafId: number | null = null;
     let targetX = window.innerWidth / 2;
     let targetY = window.innerHeight / 2;
     let currentX = targetX;
     let currentY = targetY;
-    const smoothing = 0.45;
+    const smoothing = 0.2; // lower = snappier
+
+    const updateStyle = () => {
+      document.documentElement.style.setProperty('--cursor-x', `${currentX}px`);
+      document.documentElement.style.setProperty('--cursor-y', `${currentY}px`);
+      document.documentElement.style.setProperty('--cursor-visible', '1');
+    };
 
     const animate = () => {
       currentX += (targetX - currentX) * smoothing;
       currentY += (targetY - currentY) * smoothing;
-      document.documentElement.style.setProperty('--cursor-x', `${currentX}px`);
-      document.documentElement.style.setProperty('--cursor-y', `${currentY}px`);
+      updateStyle();
       rafId = requestAnimationFrame(animate);
     };
 
     const setTarget = (event: PointerEvent) => {
       targetX = event.clientX;
       targetY = event.clientY;
-      document.documentElement.style.setProperty('--cursor-visible', '1');
-      if (rafId === null) rafId = requestAnimationFrame(animate);
+      // If animation loop isn't running yet, start it and align immediately to avoid jump.
+      if (rafId === null) {
+        currentX = targetX;
+        currentY = targetY;
+        updateStyle();
+        rafId = requestAnimationFrame(animate);
+      }
     };
 
-    const hideCursor = () => {
-      document.documentElement.style.setProperty('--cursor-visible', '0');
-    };
+    // Force-hide native cursor via JS as well, to avoid any UA overrides.
+    document.documentElement.style.cursor = 'none';
+    document.body.style.cursor = 'none';
 
+    // Initialize and start loop immediately so position never snaps away when idle.
+    document.documentElement.style.setProperty('--cursor-visible', '1');
+    updateStyle();
+    if (rafId === null) {
+      rafId = requestAnimationFrame(animate);
+    }
+    const setPosOnWheel = (event: WheelEvent) => {
+      if (event.clientX || event.clientY) {
+        targetX = event.clientX;
+        targetY = event.clientY;
+        if (rafId === null) {
+          currentX = targetX;
+          currentY = targetY;
+          updateStyle();
+          rafId = requestAnimationFrame(animate);
+        }
+      }
+    };
     window.addEventListener('pointermove', setTarget, { passive: true });
     window.addEventListener('pointerdown', setTarget, { passive: true });
     window.addEventListener('pointerenter', setTarget, { passive: true });
-    window.addEventListener('pointerleave', hideCursor);
-    window.addEventListener('blur', hideCursor);
+    // Keep cursor visible and synced on wheel/scroll
+    window.addEventListener('wheel', setPosOnWheel, { passive: true });
 
     return () => {
-      if (rafId) cancelAnimationFrame(rafId);
+      if (rafId !== null) cancelAnimationFrame(rafId);
       window.removeEventListener('pointermove', setTarget);
       window.removeEventListener('pointerdown', setTarget);
       window.removeEventListener('pointerenter', setTarget);
-      window.removeEventListener('pointerleave', hideCursor);
-      window.removeEventListener('blur', hideCursor);
+      window.removeEventListener('wheel', setPosOnWheel as any);
     };
   }, []);
 
@@ -96,11 +126,15 @@ export default function CursorController() {
       body.dataset.cursorContrast = brightness > brightnessThreshold ? 'dark' : 'light';
     };
 
-    const applyState = (state: 'default' | 'interactive' | 'active') => {
+    const applyState = (state: 'default' | 'interactive' | 'active' | 'danger') => {
       body.dataset.cursorState = state;
     };
 
     const evaluateTarget = (target: EventTarget | null) => {
+      if (target instanceof Element && target.closest(DANGER_SELECTOR)) {
+        applyState('danger');
+        return;
+      }
       if (target instanceof Element && target.closest(INTERACTIVE_SELECTOR)) {
         hoverState = 'interactive';
       } else {

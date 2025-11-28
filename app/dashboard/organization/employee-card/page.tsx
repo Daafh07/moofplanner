@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import EmployeeCardClient from './client';
 import { auth } from '@/auth';
-import { fetchEmployeesByUser, fetchDepartmentsByUser } from '@/app/lib/data';
+import { fetchEmployeesByUser, fetchDepartmentsByUser, fetchLocationsByUser } from '@/app/lib/data';
 import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
@@ -17,10 +17,11 @@ export default async function EmployeeCardPage() {
   const userId = (session.user as { id?: string } | undefined)?.id;
   const employees = userId ? await fetchEmployeesByUser(userId) : [];
   const departments = userId ? await fetchDepartmentsByUser(userId) : [];
+  const locations = userId ? await fetchLocationsByUser(userId) : [];
 
   return (
     <main className="space-y-6 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
-      <EmployeeCardClient employees={employees} departments={departments} />
+      <EmployeeCardClient employees={employees} departments={departments} locations={locations} />
     </main>
   );
 }

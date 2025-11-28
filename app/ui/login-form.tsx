@@ -78,7 +78,11 @@ export default function LoginForm() {
         {errorMessage && (
           <>
             <ExclamationCircleIcon className="h-5 w-5 text-red-400" />
-            <p className="text-sm text-red-400">{errorMessage}</p>
+            <p className="text-sm text-red-400">
+              {errorMessage === 'Invalid credentials'
+                ? 'Login failed. Please check your email and password.'
+                : errorMessage}
+            </p>
           </>
         )}
       </div>

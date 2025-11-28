@@ -19,15 +19,15 @@ export default async function Page() {
 
   const [company, metrics, approvals, events, organization] = await Promise.all([
     fetchCompanySnapshot(userId),
-    fetchDashboardMetrics(),
+    fetchDashboardMetrics(userId),
     fetchPendingApprovals(),
     fetchUpcomingEvents(),
     fetchOrganizationCards(userId),
   ]);
 
-  const seatInfo = company?.seat_limit
-    ? `${company.headcount}/${company.seat_limit} seats`
-    : `${company?.headcount ?? 0} seats • onbeperkt`;
+  const seatLimit = company?.seat_limit ?? null;
+  const headcount = company?.headcount ?? 0;
+  const seatInfo = seatLimit ? `${headcount}/${seatLimit} seats` : `${headcount} seats • onbeperkt`;
 
   return (
     <main className="space-y-8 text-white">
@@ -72,7 +72,6 @@ export default async function Page() {
               <p className={`${spaceGrotesk.className} text-2xl font-semibold`}>
                 {company?.region ?? 'Onbekend'}
               </p>
-              <p className="text-sm text-white/60">Headcount {company?.headcount ?? 0}</p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-black/20 px-5 py-4">
               <p className={`${plusJakarta.className} text-[0.55rem] uppercase tracking-[0.4em] text-white/60`}>

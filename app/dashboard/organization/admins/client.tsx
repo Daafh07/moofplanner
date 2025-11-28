@@ -5,6 +5,7 @@ import type { AdminUser } from '@/app/lib/definitions';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import clsx from 'clsx';
 import AdminForm from '../employee-card/admin-form';
+import { RemoveAdminButton } from './actions';
 
 export default function AdminsClient({ admins }: { admins: AdminUser[] }) {
   const sorted = useMemo(
@@ -22,9 +23,6 @@ export default function AdminsClient({ admins }: { admins: AdminUser[] }) {
           <div>
             <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.5em] text-white/60`}>Organization</p>
             <h1 className={`${spaceGrotesk.className} text-2xl font-semibold`}>Admins</h1>
-            <p className="mt-2 max-w-3xl text-sm text-white/70">
-              Manage dashboard access. Create admin users with a role and login credentials.
-            </p>
           </div>
           <button type="button" onClick={() => setShowCreate(true)} className="cta-primary">
             Create
@@ -70,9 +68,10 @@ export default function AdminsClient({ admins }: { admins: AdminUser[] }) {
                 </p>
                 <h2 className={`${spaceGrotesk.className} mt-1 text-2xl font-semibold`}>{selected.name}</h2>
                 <p className="text-sm text-white/70">{selected.email}</p>
+                <RemoveAdminButton userId={selected.user_id} />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-4 md:grid-cols-1">
                 <DetailTile title="Role" value={selected.role ?? 'admin'} />
                 <DetailTile title="Created at" value={new Date(selected.created_at).toLocaleDateString()} />
                 <DetailTile title="Access" value="Dashboard" />
@@ -89,8 +88,8 @@ export default function AdminsClient({ admins }: { admins: AdminUser[] }) {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="relative w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
+          <div className="relative mt-10 w-full max-w-3xl rounded-[32px] border border-white/15 bg-[#0b120b]/95 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.6)]">
             <button
               type="button"
               onClick={() => setShowCreate(false)}

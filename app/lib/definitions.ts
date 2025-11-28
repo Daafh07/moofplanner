@@ -22,6 +22,7 @@ export type Employee = {
   skills: string[] | null;
   salary_cents: number | null;
   user_id?: string | null;
+  location_id?: string | null;
 };
 
 export type Department = {
@@ -41,6 +42,9 @@ export type PlanningTime = {
   id: string;
   company_id: string;
   name: string;
+  location?: string | null;
+  location_id?: string | null;
+  location_name?: string | null;
   start_day: string | null;
   end_day: string | null;
   hours_text: string | null;
@@ -48,6 +52,13 @@ export type PlanningTime = {
   end_time: string | null;
   notes: string | null;
   is_default: boolean | null;
+};
+
+export type Location = {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string | null;
 };
 
 export type AdminUser = {

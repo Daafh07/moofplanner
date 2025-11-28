@@ -165,7 +165,7 @@ export async function registerUser(
       INSERT INTO companies (
         id,
         name,
-        contact_email,
+        personal_email,
         headcount,
         region,
         plan,
@@ -237,6 +237,7 @@ const EmployeeSchema = z.object({
   skills: z.string().optional(), // comma separated
   salaryHourly: z.coerce.number().min(0, 'Salary must be positive'),
   password: z.string().min(8, 'Password must be at least 8 characters').optional(),
+  locationId: z.string().optional(),
 });
 
 export type EmployeeState = {
@@ -294,6 +295,11 @@ export async function createEmployee(
         const val = typeof raw === 'string' ? raw.trim() : '';
         return val.length > 0 ? val : undefined;
       })(),
+      locationId: (() => {
+        const raw = formData.get('locationId');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length > 0 ? val : undefined;
+      })(),
     });
 
     if (!parsed.success) {
@@ -311,6 +317,7 @@ export async function createEmployee(
       skills,
       salaryHourly,
       password,
+      locationId,
     } = parsed.data;
 
     const departmentList =
@@ -325,26 +332,6 @@ export async function createEmployee(
         .filter(Boolean) ?? [];
 
     const salaryCents = Math.round((salaryHourly ?? 0) * 100);
-
-    await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-    await sql`
-      CREATE TABLE IF NOT EXISTS employees (
-        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-        company_id UUID REFERENCES companies(id),
-        name TEXT NOT NULL,
-        email TEXT NOT NULL,
-        phone TEXT,
-        contract_type TEXT,
-        hours_per_week INT,
-        role TEXT,
-        departments TEXT[],
-        skills TEXT[],
-        salary_cents INT,
-        user_id UUID,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `;
-    await sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS user_id UUID`;
 
     // Enforce seat limits before creating the employee.
     const companyPlan = await sql<{ seat_limit: number | null; plan: string | null }[]>`
@@ -383,27 +370,29 @@ export async function createEmployee(
         name,
         email,
         phone,
-        contract_type,
-        hours_per_week,
-        role,
-        departments,
-        skills,
-        salary_cents,
-        user_id
-      )
-      VALUES (
-        ${companyId},
-        ${name},
-        ${email},
+      contract_type,
+      hours_per_week,
+      role,
+      departments,
+      skills,
+      salary_cents,
+      user_id,
+      location_id
+    )
+    VALUES (
+      ${companyId},
+      ${name},
+      ${email},
         ${phone ?? null},
         ${contractType},
         ${hoursPerWeek},
         ${role},
-        ${departmentList},
-        ${skillsList},
-        ${salaryCents},
-        ${linkedUserId}
-      )
+      ${departmentList},
+      ${skillsList},
+      ${salaryCents},
+      ${linkedUserId},
+      ${locationId ?? null}
+    )
     `;
 
     // Keep headcount in sync with current employee total.
@@ -446,13 +435,18 @@ export async function updateEmployee(
         const val = typeof raw === 'string' ? raw.trim() : '';
         return val.length > 0 ? val : undefined;
       })(),
+      locationId: (() => {
+        const raw = formData.get('locationId');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length > 0 ? val : undefined;
+      })(),
     });
 
     if (!parsed.success) {
       return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
     }
 
-    const { name, email, phone, contractType, hoursPerWeek, role, departments, skills, salaryHourly, password } =
+    const { name, email, phone, contractType, hoursPerWeek, role, departments, skills, salaryHourly, password, locationId } =
       parsed.data;
     const departmentList =
       departments
@@ -491,7 +485,8 @@ export async function updateEmployee(
           departments=${departmentList},
           skills=${skillsList},
           salary_cents=${salaryCents},
-          user_id=${linkedUserId ?? null}
+          user_id=${linkedUserId ?? null},
+          location_id=${locationId ?? null}
       WHERE id=${id} AND company_id=${companyId}
       RETURNING id
     `;
@@ -543,6 +538,18 @@ export type DepartmentState = {
 };
 
 const defaultDepartmentState: DepartmentState = { status: 'idle', message: undefined };
+// Locations share the same shape as a simple name/description table
+const LocationSchema = z.object({
+  name: z.string().min(2, 'Name is required'),
+  description: z.string().optional(),
+});
+
+export type LocationState = {
+  status: 'idle' | 'success' | 'error';
+  message?: string;
+};
+
+const defaultLocationState: LocationState = { status: 'idle', message: undefined };
 
 export async function createDepartment(prevState: DepartmentState = defaultDepartmentState, formData: FormData) {
   try {
@@ -650,14 +657,73 @@ export async function deleteDepartment(
   }
 }
 
+export async function createLocation(
+  prevState: LocationState = defaultLocationState,
+  formData: FormData,
+): Promise<LocationState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const parsed = LocationSchema.safeParse({
+      name: formData.get('name'),
+      description: formData.get('description'),
+    });
+    if (!parsed.success) {
+      return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
+    }
+
+    const { name, description } = parsed.data;
+
+    await sql`
+      INSERT INTO locations (company_id, name, description)
+      VALUES (${companyId}, ${name}, ${description ?? null})
+    `;
+    return { status: 'success', message: 'Location created.' };
+  } catch (error) {
+    console.error('Create location failed:', error);
+    return { status: 'error', message: 'Location could not be created.' };
+  }
+}
+
+export async function deleteLocation(
+  prevState: LocationState = defaultLocationState,
+  formData: FormData,
+): Promise<LocationState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'User id missing in session.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked to this user.' };
+
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing location id.' };
+
+    const res = await sql`DELETE FROM locations WHERE id=${id} AND company_id=${companyId}`;
+    if (res.count === 0) return { status: 'error', message: 'Location not found or not in your company.' };
+    // Detach from planning_times
+    await sql`UPDATE planning_times SET location_id = NULL WHERE location_id = ${id} AND company_id = ${companyId}`;
+    return { status: 'success', message: 'Location deleted.' };
+  } catch (error) {
+    console.error('Delete location failed:', error);
+    return { status: 'error', message: 'Location could not be deleted.' };
+  }
+}
+
 const PlanningTimeSchema = z.object({
   name: z.string().min(2, 'Name is required'),
-  startDay: z.string().optional(),
-  endDay: z.string().optional(),
-  hoursText: z.string().optional(),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
-  notes: z.string().optional(),
+  locationId: z.coerce.string().min(1, 'Location is required'),
+  location: z.string().nullish(),
+  startDay: z.string().nullish(),
+  endDay: z.string().nullish(),
+  hoursText: z.string().nullish(),
+  startTime: z.string().nullish(),
+  endTime: z.string().nullish(),
+  notes: z.string().nullish(),
   isDefault: z.coerce.boolean().optional(),
 });
 
@@ -686,6 +752,12 @@ export async function createPlanningTime(
 
     const parsed = PlanningTimeSchema.safeParse({
       name: formData.get('name'),
+      locationId: (() => {
+        const raw = formData.get('locationId');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length ? val : undefined;
+      })(),
+      location: formData.get('location'),
       startDay: formData.get('startDay'),
       endDay: formData.get('endDay'),
       hoursText: formData.get('hoursText'),
@@ -699,32 +771,40 @@ export async function createPlanningTime(
       return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
     }
 
-    const { name, startDay, endDay, hoursText, startTime, endTime, notes, isDefault } = parsed.data;
+    const { name, locationId, location, startDay, endDay, hoursText, startTime, endTime, notes, isDefault } =
+      parsed.data;
+    // Normalize weekly schedule JSON
+    const scheduleJson = typeof hoursText === 'string' && hoursText.trim().length > 0 ? hoursText.trim() : null;
+    let computedStartDay = startDay ?? null;
+    let computedEndDay = endDay ?? null;
+    if (scheduleJson) {
+      try {
+        const parsedSchedule = JSON.parse(scheduleJson);
+        if (Array.isArray(parsedSchedule)) {
+          const activeDays = parsedSchedule.filter(
+            (d: any) => d && !d.closed && typeof d.day === 'string' && (d.start || d.end),
+          );
+          if (activeDays.length > 0) {
+            computedStartDay = activeDays[0].day ?? computedStartDay;
+            computedEndDay = activeDays[activeDays.length - 1].day ?? computedEndDay;
+          }
+        }
+      } catch {
+        // keep defaults
+      }
+    }
 
-    await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
-    await sql`
-      CREATE TABLE IF NOT EXISTS planning_times (
-        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-        company_id UUID REFERENCES companies(id),
-        name TEXT NOT NULL,
-        start_day TEXT,
-        end_day TEXT,
-        hours_text TEXT,
-        start_time TEXT,
-        end_time TEXT,
-        notes TEXT,
-        is_default BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `;
-
-    if (isDefault) {
-      await sql`UPDATE planning_times SET is_default = FALSE WHERE company_id = ${companyId}`;
+    if (isDefault && locationId) {
+      await sql`
+        UPDATE planning_times
+        SET is_default = FALSE
+        WHERE company_id = ${companyId} AND location_id = ${locationId}
+      `;
     }
 
     await sql`
-      INSERT INTO planning_times (company_id, name, start_day, end_day, hours_text, start_time, end_time, notes, is_default)
-      VALUES (${companyId}, ${name}, ${startDay ?? null}, ${endDay ?? null}, ${hoursText ?? null}, ${startTime ?? null}, ${endTime ?? null}, ${notes ?? null}, ${!!isDefault})
+      INSERT INTO planning_times (company_id, name, location, location_id, start_day, end_day, hours_text, start_time, end_time, notes, is_default)
+      VALUES (${companyId}, ${name}, ${location ?? null}, ${locationId ?? null}, ${computedStartDay}, ${computedEndDay}, ${scheduleJson}, ${startTime ?? null}, ${endTime ?? null}, ${notes ?? null}, ${!!isDefault})
     `;
 
     return { status: 'success', message: 'Planning time created.' };
@@ -751,6 +831,12 @@ export async function updatePlanningTime(
 
     const parsed = PlanningTimeSchema.safeParse({
       name: formData.get('name'),
+      locationId: (() => {
+        const raw = formData.get('locationId');
+        const val = typeof raw === 'string' ? raw.trim() : '';
+        return val.length ? val : undefined;
+      })(),
+      location: formData.get('location'),
       startDay: formData.get('startDay'),
       endDay: formData.get('endDay'),
       hoursText: formData.get('hoursText'),
@@ -762,18 +848,44 @@ export async function updatePlanningTime(
     if (!parsed.success) {
       return { status: 'error', message: parsed.error.errors[0]?.message ?? 'Invalid input.' };
     }
-    const { name, startDay, endDay, hoursText, startTime, endTime, notes, isDefault } = parsed.data;
+    const { name, locationId, location, startDay, endDay, hoursText, startTime, endTime, notes, isDefault } =
+      parsed.data;
+    const scheduleJson = typeof hoursText === 'string' && hoursText.trim().length > 0 ? hoursText.trim() : null;
+    let computedStartDay = startDay ?? null;
+    let computedEndDay = endDay ?? null;
+    if (scheduleJson) {
+      try {
+        const parsedSchedule = JSON.parse(scheduleJson);
+        if (Array.isArray(parsedSchedule)) {
+          const activeDays = parsedSchedule.filter(
+            (d: any) => d && !d.closed && typeof d.day === 'string' && (d.start || d.end),
+          );
+          if (activeDays.length > 0) {
+            computedStartDay = activeDays[0].day ?? computedStartDay;
+            computedEndDay = activeDays[activeDays.length - 1].day ?? computedEndDay;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     await sql.begin(async (trx) => {
-      if (isDefault) {
-        await trx`UPDATE planning_times SET is_default = FALSE WHERE company_id = ${companyId}`;
+      if (isDefault && locationId) {
+        await trx`
+          UPDATE planning_times
+          SET is_default = FALSE
+          WHERE company_id = ${companyId} AND location_id = ${locationId}
+        `;
       }
       const updated = await trx`
         UPDATE planning_times
         SET name=${name},
-            start_day=${startDay ?? null},
-            end_day=${endDay ?? null},
-            hours_text=${hoursText ?? null},
+            location=${location ?? null},
+            location_id=${locationId ?? null},
+            start_day=${computedStartDay},
+            end_day=${computedEndDay},
+            hours_text=${scheduleJson},
             start_time=${startTime ?? null},
             end_time=${endTime ?? null},
             notes=${notes ?? null},
@@ -833,8 +945,19 @@ export async function setPlanningTimeDefault(
       return { status: 'error', message: 'Missing planning id.' };
     }
 
+    const planning = await sql<{ location_id: string | null }[]>`
+      SELECT location_id FROM planning_times WHERE id = ${planningId} AND company_id = ${companyId} LIMIT 1
+    `;
+    const locId = planning[0]?.location_id ?? null;
+
     await sql.begin(async (trx) => {
-      await trx`UPDATE planning_times SET is_default = FALSE WHERE company_id = ${companyId}`;
+      if (locId) {
+        await trx`
+          UPDATE planning_times
+          SET is_default = FALSE
+          WHERE company_id = ${companyId} AND location_id = ${locId}
+        `;
+      }
       await trx`
         UPDATE planning_times
         SET is_default = TRUE

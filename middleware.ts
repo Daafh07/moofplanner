@@ -10,16 +10,19 @@ export async function middleware(req: NextRequest) {
 
   const token = await getToken({ req, secret });
   const isLoggedIn = !!token;
+  const isAdmin = Boolean((token as { isAdmin?: boolean } | null)?.isAdmin);
   const { pathname, search } = req.nextUrl;
 
   const isDashboard = pathname.startsWith('/dashboard');
   const isLogin = pathname === '/login';
 
-  if (isDashboard && !isLoggedIn) {
-    return NextResponse.redirect(new URL('/login', req.url));
+  if (isDashboard && (!isLoggedIn || !isAdmin)) {
+    const url = new URL('/login', req.url);
+    url.searchParams.set('message', 'Only company admins can access the dashboard.');
+    return NextResponse.redirect(url);
   }
 
-  if (isLogin && isLoggedIn) {
+  if (isLogin && isLoggedIn && isAdmin) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 

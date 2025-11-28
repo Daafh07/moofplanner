@@ -1,5 +1,5 @@
 import postgres from 'postgres';
-import { Revenue, Employee, Department, PlanningTime, AdminUser } from './definitions';
+import { Revenue, Employee, Department, PlanningTime, AdminUser, Location } from './definitions';
 import { formatCurrency } from './utils';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
@@ -18,17 +18,41 @@ export async function fetchCompanySnapshot(userId?: string) {
   let result: CompanySnapshot[];
   if (userId) {
     result = await sql<CompanySnapshot[]>`
-      SELECT c.id, c.name, c.plan, c.headcount, c.region, c.seat_limit, c.billing_mode
+      SELECT
+        c.id,
+        c.name,
+        c.plan,
+        COALESCE(emp.count, 0) AS headcount,
+        c.region,
+        c.seat_limit,
+        c.billing_mode
       FROM companies c
       JOIN company_admins ca ON ca.company_id = c.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS count
+        FROM employees e
+        WHERE e.company_id = c.id
+      ) emp ON TRUE
       WHERE ca.user_id = ${userId}
       ORDER BY c.created_at DESC
       LIMIT 1
     `;
   } else {
     result = await sql<CompanySnapshot[]>`
-      SELECT id, name, plan, headcount, region, seat_limit, billing_mode
-      FROM companies
+      SELECT
+        c.id,
+        c.name,
+        c.plan,
+        COALESCE(emp.count, 0) AS headcount,
+        c.region,
+        c.seat_limit,
+        c.billing_mode
+      FROM companies c
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS count
+        FROM employees e
+        WHERE e.company_id = c.id
+      ) emp ON TRUE
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -36,12 +60,24 @@ export async function fetchCompanySnapshot(userId?: string) {
   return result[0] ?? null;
 }
 
-export async function fetchDashboardMetrics() {
-  const [{ total_headcount }] = await sql<{ total_headcount: number | null }[]>`
-    SELECT COALESCE(SUM(headcount), 0) AS total_headcount FROM companies
+export async function fetchDashboardMetrics(userId?: string) {
+  // Scope metrics to the signed-in user's company so counts match their dashboard.
+  const metrics = await sql<{ headcount: number | null }[]>`
+    SELECT COALESCE(emp.count, 0) AS headcount
+    FROM companies c
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::int AS count
+      FROM employees e
+      WHERE e.company_id = c.id
+    ) emp ON TRUE
+    WHERE c.id = (
+      SELECT company_id FROM company_admins WHERE user_id = ${userId ?? null} LIMIT 1
+    )
+    LIMIT 1
   `;
+  const headcount = metrics[0]?.headcount ?? 0;
 
-  const scheduledHours = Number(total_headcount ?? 0) * 38;
+  const scheduledHours = Number(headcount ?? 0) * 38;
 
   return {
     weeklyLaborCost: formatCurrency(0),
@@ -124,11 +160,30 @@ export async function fetchEmployeesByUser(userId: string) {
 export async function fetchDepartmentsByUser(userId: string) {
   try {
     const departments = await sql<Department[]>`
-      SELECT d.*
-      FROM departments d
-      WHERE d.company_id = (
+      WITH company_scope AS (
         SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
       )
+      SELECT
+        d.*,
+        COALESCE(stats.members_count, 0) AS members_count,
+        COALESCE(stats.hourly_cost, 0)   AS hourly_cost,
+        COALESCE(pt.count, 0)            AS schedules_count
+      FROM departments d
+      JOIN company_scope cs ON d.company_id = cs.company_id
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*)::int AS members_count,
+          COALESCE(SUM(e.salary_cents), 0)::float / 100.0 AS hourly_cost
+        FROM employees e
+        WHERE e.company_id = d.company_id
+          AND e.departments IS NOT NULL
+          AND d.id::text = ANY(e.departments)
+      ) stats ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS count
+        FROM planning_times p
+        WHERE p.company_id = d.company_id
+      ) pt ON TRUE
       ORDER BY d.created_at DESC
     `;
     return departments;
@@ -141,8 +196,9 @@ export async function fetchDepartmentsByUser(userId: string) {
 export async function fetchPlanningTimesByUser(userId: string) {
   try {
     const items = await sql<PlanningTime[]>`
-      SELECT p.*
+      SELECT p.*, l.name AS location_name
       FROM planning_times p
+      LEFT JOIN locations l ON p.location_id = l.id
       WHERE p.company_id = (
         SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
       )
@@ -167,6 +223,21 @@ export async function fetchAdminsByUser(userId: string) {
       ORDER BY ca.created_at DESC
     `;
     return admins;
+  } catch (err) {
+    console.error('Database Error:', err);
+    return [];
+  }
+}
+
+export async function fetchLocationsByUser(userId: string) {
+  try {
+    const locations = await sql<Location[]>`
+      SELECT l.*
+      FROM locations l
+      WHERE l.company_id = (SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1)
+      ORDER BY l.created_at DESC
+    `;
+    return locations;
   } catch (err) {
     console.error('Database Error:', err);
     return [];
