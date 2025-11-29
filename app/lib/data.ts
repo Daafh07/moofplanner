@@ -110,23 +110,28 @@ export async function fetchUpcomingEvents() {
 }
 
 export async function fetchOrganizationCards(userId?: string) {
-  if (userId) {
-    return sql<{ name: string; email: string; role: string | null }[]>`
+  try {
+    if (userId) {
+      return await sql<{ name: string; email: string; role: string | null }[]>`
+        SELECT u.name, u.email, ca.role
+        FROM company_admins ca
+        JOIN users u ON ca.user_id = u.id
+        WHERE ca.company_id = (
+          SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+        )
+        LIMIT 4
+      `;
+    }
+    return await sql<{ name: string; email: string; role: string | null }[]>`
       SELECT u.name, u.email, ca.role
       FROM company_admins ca
       JOIN users u ON ca.user_id = u.id
-      WHERE ca.company_id = (
-        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
-      )
       LIMIT 4
     `;
+  } catch (err) {
+    console.error('fetchOrganizationCards failed', err);
+    return [];
   }
-  return sql<{ name: string; email: string; role: string | null }[]>`
-    SELECT u.name, u.email, ca.role
-    FROM company_admins ca
-    JOIN users u ON ca.user_id = u.id
-    LIMIT 4
-  `;
 }
 
 export async function fetchRevenue() {
