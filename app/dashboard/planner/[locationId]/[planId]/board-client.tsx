@@ -117,7 +117,9 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                     const normalizedDate = normalizeDate(date);
                     const dayShifts = (shiftsByEmp[emp.id] ?? []).filter((s) => {
                       const shiftDate = normalizeDate(s.date);
-                      return shiftDate === normalizedDate;
+                      // Show only matching department; legacy shifts without department_id stay visible.
+                      const matchesDept = !s.department_id || s.department_id === dept.id;
+                      return shiftDate === normalizedDate && matchesDept;
                     });
                     
                     return (

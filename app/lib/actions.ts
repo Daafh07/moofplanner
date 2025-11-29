@@ -431,10 +431,23 @@ export async function deletePlannerDraft(formData: FormData): Promise<DraftState
     if (!id) return { status: 'error', message: 'Missing draft id.' };
 
     await ensurePlannerDraftsTable();
-    const res = await sql`DELETE FROM planning_drafts WHERE id=${id} AND company_id=${companyId}`;
+    // Delete associated shifts for this planning/week to keep storage clean.
+    const res = await sql.begin(async (trx) => {
+      const draftRows = await trx<{ planning_id: string; location_id: string; week: string | null }[]>`
+        DELETE FROM planning_drafts WHERE id=${id} AND company_id=${companyId}
+        RETURNING planning_id, location_id, week
+      `;
+      if (draftRows.length === 0) return { count: 0 };
+      const draft = draftRows[0];
+      // If week is present, scope by week range; otherwise delete all shifts for that planning.
+      // Delete shifts for that planning (regardless of week) to keep storage clean.
+      await trx`DELETE FROM shifts WHERE planning_id = ${draft.planning_id}`;
+      return { count: 1 };
+    });
     if (res.count === 0) {
       return { status: 'error', message: 'Draft not found.' };
     }
+    revalidatePath('/dashboard/planner');
     return { status: 'success', message: 'Draft deleted.' };
   } catch (err) {
     console.error('Delete draft failed', err);
