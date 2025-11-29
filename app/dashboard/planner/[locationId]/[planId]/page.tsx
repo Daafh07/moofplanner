@@ -32,13 +32,29 @@ function formatLocal(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
-function buildWeekDates(days: string[]) {
+function startOfISOWeek(weekString: string | undefined) {
+  if (!weekString) return null;
+  const [yearPart, weekPart] = weekString.split('-W');
+  const year = Number(yearPart);
+  const week = Number(weekPart);
+  if (!year || !week) return null;
+  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+  const day = simple.getUTCDay() || 7;
+  const monday = new Date(simple);
+  monday.setUTCDate(simple.getUTCDate() - day + 1);
+  return monday;
+}
+
+function buildWeekDates(days: string[], weekString?: string) {
+  const baseMonday = startOfISOWeek(weekString);
   const now = new Date();
-  // start of week Monday
-  const day = now.getDay(); // 0 Sunday
-  const diff = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
+  const monday = baseMonday ?? (() => {
+    const day = now.getDay(); // 0 Sunday
+    const diff = day === 0 ? -6 : 1 - day;
+    const first = new Date(now);
+    first.setDate(now.getDate() + diff);
+    return first;
+  })();
   return days.map((label) => {
     const idx = dayOrder.findIndex((d) => d.toLowerCase() === label.toLowerCase());
     const date = new Date(monday);
@@ -76,10 +92,13 @@ export const revalidate = 0;
 
 export default async function PlannerBoardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locationId: string; planId: string }>;
+  searchParams: Promise<{ week?: string }>;
 }) {
   const resolvedParams = await params;
+  const resolvedSearch = await searchParams;
   const session = await auth();
   if (!session?.user) redirect('/login');
   const userId = (session.user as { id?: string } | undefined)?.id;
@@ -115,7 +134,7 @@ export default async function PlannerBoardPage({
   }));
   
   const dayLabels = dayRanges.map((d) => d.day);
-  const weekDates = buildWeekDates(dayLabels);
+  const weekDates = buildWeekDates(dayLabels, resolvedSearch.week);
   
   const deptEmployees = departments
     .map((dept) => ({
@@ -131,6 +150,10 @@ export default async function PlannerBoardPage({
     .filter((d) => d.emps.length > 0);
 
   const weekRangeLabel = formatWeekRangeLabel(weekDates);
+  const pillClass =
+    'min-w-[180px] rounded-full border border-white/30 px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.32em] text-white/85 transition hover:border-white hover:text-white text-center';
+  const primaryPillClass =
+    'min-w-[180px] rounded-full border border-white bg-white px-4 py-2 text-[0.7rem] font-semibold uppercase tracking-[0.32em] text-[#0d140b] transition hover:border-[#d2ff00] hover:bg-[#d2ff00] hover:text-[#0d140b] text-center';
 
   return (
     <main className="space-y-8 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
@@ -143,19 +166,21 @@ export default async function PlannerBoardPage({
             {weekRangeLabel ? ` · Week ${weekRangeLabel}` : ''}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/dashboard/planner"
-            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
-          >
-            All locations
-          </Link>
-          <Link
-            href={`/dashboard/planner/${location.id}`}
-            className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
-          >
-            Change plan
-          </Link>
+        <div className="flex flex-col items-start gap-3 md:items-end">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/planner"
+              className={pillClass}
+            >
+              All locations
+            </Link>
+            <Link
+              href={`/dashboard/planner/${location.id}`}
+              className={pillClass}
+            >
+              Change plan
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -184,6 +209,21 @@ export default async function PlannerBoardPage({
           locationId={location.id}
         />
       </section>
+
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          className={primaryPillClass}
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          className={primaryPillClass}
+        >
+          Publish
+        </button>
+      </div>
     </main>
   );
 }
