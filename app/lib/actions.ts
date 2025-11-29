@@ -379,6 +379,36 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
   }
 }
 
+export async function deleteShift(formData: FormData): Promise<boolean> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return false;
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return false;
+
+    const idVal = formData.get('id');
+    const pathVal = formData.get('path');
+    const id = typeof idVal === 'string' ? idVal : '';
+    const path = typeof pathVal === 'string' ? pathVal : '';
+    if (!id) return false;
+
+    await ensureShiftsTable();
+    await sql`DELETE FROM shifts WHERE id = ${id} AND company_id = ${companyId}`;
+    if (path) revalidatePath(path);
+    return true;
+  } catch (err) {
+    console.error('Delete shift failed:', err);
+    return false;
+  }
+}
+
+// Update savePlannerDraft to NOT delete shifts
+type DraftState = {
+  status: 'idle' | 'success' | 'error';
+  message?: string;
+};
+
 // Update savePlannerDraft to NOT delete shifts
 export async function savePlannerDraft(formData: FormData): Promise<DraftState> {
   try {
@@ -409,7 +439,6 @@ export async function savePlannerDraft(formData: FormData): Promise<DraftState> 
       DO UPDATE SET status='draft', published_at=NULL, updated_at = now()
     `;
     revalidatePath('/dashboard/planner');
-    if (path) revalidatePath(path);
     return { status: 'success', message: 'Draft saved.' };
   } catch (err) {
     console.error('Save draft failed', err);
@@ -474,7 +503,6 @@ export async function publishPlannerDraft(formData: FormData): Promise<DraftStat
       DO UPDATE SET status='published', published_at=now(), updated_at=now()
     `;
     revalidatePath('/dashboard/planner');
-    if (path) revalidatePath(path);
     return { status: 'success', message: 'Published.' };
   } catch (err) {
     console.error('Publish draft failed', err);

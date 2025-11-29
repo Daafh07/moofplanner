@@ -245,6 +245,39 @@ export async function fetchShiftsByPlanning(planningId?: string) {
   }
 }
 
+export async function fetchShiftsByDraft(draftId: string) {
+  if (!draftId) return [];
+  try {
+    const rows = await sql<Shift[]>`
+      SELECT *
+      FROM shifts
+      WHERE draft_id = ${draftId}
+      ORDER BY date ASC, start_time ASC
+    `;
+    return rows;
+  } catch (err) {
+    console.error('Database Error: fetchShiftsByDraft failed', err);
+    return [];
+  }
+}
+
+// Keep the old function for backward compatibility
+// export async function fetchShiftsByPlanning(planningId?: string) {
+//   if (!planningId) return [];
+//   try {
+//     const rows = await sql<Shift[]>`
+//       SELECT *
+//       FROM shifts
+//       WHERE planning_id = ${planningId}
+//       ORDER BY date ASC, start_time ASC
+//     `;
+//     return rows;
+//   } catch (err) {
+//     console.error('Database Error: fetchShiftsByPlanning failed', err);
+//     return [];
+//   }
+// }
+
 export async function fetchAdminsByUser(userId: string) {
   try {
     const admins = await sql<AdminUser[]>`

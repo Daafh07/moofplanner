@@ -6,13 +6,16 @@ import {
   fetchLocationsByUser,
   fetchEmployeesByUser,
   fetchDepartmentsByUser,
-  fetchShiftsByPlanning,
+  fetchShiftsByDraft,
   type Shift,
 } from '@/app/lib/data';
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import PlannerBoardClient from './board-client';
 import Link from 'next/link';
 import { savePlannerDraft, publishPlannerDraft } from '@/app/lib/actions';
+import sql from '@/app/lib/db';
+
+// ... (keep all your helper functions: parseSchedule, dayOrder, formatLocal, startOfISOWeek, buildWeekDates, durationHours, formatWeekRangeLabel)
 
 function parseSchedule(hoursText: string | null) {
   try {
@@ -50,7 +53,7 @@ function buildWeekDates(days: string[], weekString?: string) {
   const baseMonday = startOfISOWeek(weekString);
   const now = new Date();
   const monday = baseMonday ?? (() => {
-    const day = now.getDay(); // 0 Sunday
+    const day = now.getDay();
     const diff = day === 0 ? -6 : 1 - day;
     const first = new Date(now);
     first.setDate(now.getDate() + diff);
@@ -62,13 +65,6 @@ function buildWeekDates(days: string[], weekString?: string) {
     if (idx >= 0) date.setDate(monday.getDate() + idx);
     return formatLocal(date);
   });
-}
-
-function durationHours(start: string, end: string) {
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
-  const mins = eh * 60 + em - (sh * 60 + sm);
-  return Math.max(mins, 0) / 60;
 }
 
 function formatWeekRangeLabel(weekDates: string[]) {
@@ -87,7 +83,6 @@ export const metadata: Metadata = {
   title: 'Planner · Board',
 };
 
-// Force dynamic rendering to always fetch fresh data
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -96,7 +91,7 @@ export default async function PlannerBoardPage({
   searchParams,
 }: {
   params: Promise<{ locationId: string; planId: string }>;
-  searchParams: Promise<{ week?: string; readOnly?: string }>;
+  searchParams: Promise<{ week?: string; readOnly?: string; draftId?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearch = await searchParams;
@@ -105,12 +100,11 @@ export default async function PlannerBoardPage({
   if (!session?.user) redirect('/login');
   const userId = (session.user as { id?: string } | undefined)?.id;
   
-  const [locations, planning, employees, departments, shifts] = await Promise.all([
+  const [locations, planning, employees, departments] = await Promise.all([
     userId ? fetchLocationsByUser(userId) : [],
     userId ? fetchPlanningTimesByUser(userId) : [],
     userId ? fetchEmployeesByUser(userId) : [],
     userId ? fetchDepartmentsByUser(userId) : [],
-    userId ? fetchShiftsByPlanning(resolvedParams.planId) : [],
   ]);
 
   const location = locations.find((l) => l.id === resolvedParams.locationId);
@@ -121,6 +115,51 @@ export default async function PlannerBoardPage({
   if (!location || !plan) {
     redirect('/dashboard/planner');
   }
+
+  // Get or create draft
+  const companyId = userId ? await sql<{ company_id: string }[]>`
+    SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+  `.then(rows => rows[0]?.company_id) : null;
+
+  if (!companyId) redirect('/login');
+
+  const week = typeof resolvedSearch.week === 'string' ? resolvedSearch.week : null;
+  
+  // Find or create draft
+  let draftId = resolvedSearch.draftId;
+  if (!draftId) {
+    const existingDraft = await sql<{ id: string }[]>`
+      SELECT id FROM planning_drafts
+      WHERE company_id = ${companyId}
+        AND location_id = ${location.id}
+        AND planning_id = ${plan.id}
+        AND week = ${week}
+        AND status = 'draft'
+      LIMIT 1
+    `;
+    
+    if (existingDraft.length > 0) {
+      draftId = existingDraft[0].id;
+    } else {
+      // Create new draft
+      const newDraft = await sql<{ id: string }[]>`
+        INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status)
+        VALUES (${companyId}, ${location.id}, ${plan.id}, ${week}, 'draft')
+        RETURNING id
+      `;
+      draftId = newDraft[0].id;
+    }
+    
+    // Redirect to include draftId in URL
+    const params = new URLSearchParams();
+    if (week) params.set('week', week);
+    if (readOnly) params.set('readOnly', '1');
+    params.set('draftId', draftId);
+    redirect(`/dashboard/planner/${location.id}/${plan.id}?${params.toString()}`);
+  }
+
+  // Fetch shifts for this specific draft
+  const shifts = draftId ? await fetchShiftsByDraft(draftId) : [];
 
   const schedule = parseSchedule(plan.hours_text);
   const locationEmployees = employees.filter((e) => {
@@ -170,16 +209,10 @@ export default async function PlannerBoardPage({
         </div>
         <div className="flex flex-col items-start gap-3 md:items-end">
           <div className="flex flex-wrap items-center gap-2">
-            <Link
-              href="/dashboard/planner"
-              className={pillClass}
-            >
+            <Link href="/dashboard/planner" className={pillClass}>
               All locations
             </Link>
-            <Link
-              href={`/dashboard/planner/${location.id}`}
-              className={pillClass}
-            >
+            <Link href={`/dashboard/planner/${location.id}`} className={pillClass}>
               Change plan
             </Link>
           </div>
@@ -209,39 +242,42 @@ export default async function PlannerBoardPage({
           shifts={shifts}
           planId={plan.id}
           locationId={location.id}
+          draftId={draftId}
+          week={week ?? undefined}
           readOnly={readOnly}
         />
       </section>
 
       {!readOnly && (
-      <form className="flex flex-wrap justify-end gap-2">
-        <input type="hidden" name="planningId" value={plan.id} />
-        <input type="hidden" name="locationId" value={location.id} />
-        <input type="hidden" name="week" value={resolvedSearch.week ?? ''} />
-        <input type="hidden" name="path" value={`/dashboard/planner/${location.id}/${plan.id}${resolvedSearch.week ? `?week=${encodeURIComponent(resolvedSearch.week)}` : ''}`} />
-        <button
-          type="submit"
-          formAction={async (formData) => {
-            'use server';
-            await savePlannerDraft(formData);
-            redirect('/dashboard/planner');
-          }}
-          className={primaryPillClass}
-        >
-          Save
-        </button>
-        <button
-          formAction={async (formData) => {
-            'use server';
-            await publishPlannerDraft(formData);
-            redirect('/dashboard/planner');
-          }}
-          type="submit"
-          className={primaryPillClass}
-        >
-          Publish
-        </button>
-      </form>
+        <form className="flex flex-wrap justify-end gap-2">
+          <input type="hidden" name="planningId" value={plan.id} />
+          <input type="hidden" name="locationId" value={location.id} />
+          <input type="hidden" name="week" value={resolvedSearch.week ?? ''} />
+          <input type="hidden" name="draftId" value={draftId} />
+          <input type="hidden" name="path" value={`/dashboard/planner/${location.id}/${plan.id}?draftId=${draftId}${resolvedSearch.week ? `&week=${encodeURIComponent(resolvedSearch.week)}` : ''}`} />
+          <button
+            type="submit"
+            formAction={async (formData) => {
+              'use server';
+              await savePlannerDraft(formData);
+              redirect('/dashboard/planner');
+            }}
+            className={primaryPillClass}
+          >
+            Save
+          </button>
+          <button
+            formAction={async (formData) => {
+              'use server';
+              await publishPlannerDraft(formData);
+              redirect('/dashboard/planner');
+            }}
+            type="submit"
+            className={primaryPillClass}
+          >
+            Publish
+          </button>
+        </form>
       )}
     </main>
   );

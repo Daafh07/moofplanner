@@ -25,10 +25,22 @@ type Props = {
   shifts: Shift[];
   planId: string;
   locationId: string;
+  draftId?: string;
+  week?: string | null;
   readOnly?: boolean;
 };
 
-export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees, shifts, planId, locationId, readOnly }: Props) {
+export default function PlannerBoardClient({
+  dayRanges,
+  weekDates,
+  deptEmployees,
+  shifts,
+  planId,
+  locationId,
+  draftId,
+  week,
+  readOnly,
+}: Props) {
   const [localShifts, setLocalShifts] = useState<Shift[]>(shifts);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
