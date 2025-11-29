@@ -15,10 +15,13 @@ export const metadata: Metadata = {
 
 export default async function PlannerLocationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locationId: string }>;
+  searchParams: Promise<{ week?: string }>;
 }) {
   const resolvedParams = await params;
+  const resolvedSearch = await searchParams;
   const session = await auth();
   if (!session?.user) {
     redirect('/login');
@@ -36,12 +39,16 @@ export default async function PlannerLocationPage({
   }
   const plans = planning.filter((p) => p.location_id === location.id);
 
+  const selectedWeek =
+    typeof resolvedSearch.week === 'string' && resolvedSearch.week.length > 0 ? resolvedSearch.week : undefined;
+
   return (
     <PlannerLocationClient
       location={location}
       plans={plans}
       employees={employees}
       departments={departments}
+      selectedWeek={selectedWeek}
     />
   );
 }

@@ -10,6 +10,7 @@ type DeptEmp = { dept: { id: string; name: string }; emps: { id: string; name: s
 type Shift = {
   id: string;
   employee_id: string;
+  department_id?: string | null;
   date: string;
   start_time: string;
   end_time: string;
@@ -24,9 +25,10 @@ type Props = {
   shifts: Shift[];
   planId: string;
   locationId: string;
+  readOnly?: boolean;
 };
 
-export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees, shifts, planId, locationId }: Props) {
+export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees, shifts, planId, locationId, readOnly }: Props) {
   const [localShifts, setLocalShifts] = useState<Shift[]>(shifts);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -48,25 +50,33 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
   const [modal, setModal] = useState<{
     open: boolean;
     employeeId: string;
+    departmentId: string;
     date: string;
     start: string;
     end: string;
-  }>({ open: false, employeeId: '', date: '', start: '', end: '' });
+  }>({ open: false, employeeId: '', departmentId: '', date: '', start: '', end: '' });
 
   return (
     <div className="overflow-auto rounded-2xl bg-black/20 ring-1 ring-white/10">
       <table className="min-w-full border-collapse text-sm text-white">
+        <colgroup>
+          <col className="w-64" />
+          {dayRanges.map((_, idx) => (
+            <col key={idx} className="min-w-[320px]" />
+          ))}
+          <col className="w-56" />
+        </colgroup>
         <thead className="bg-black/30">
           <tr className="border-b border-white/10">
             <th
-              className={`w-52 px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+              className={`sticky left-0 z-20 bg-black/40 px-6 py-3 text-left text-[0.72rem] uppercase tracking-[0.35em] text-white/60 backdrop-blur-sm ${plusJakarta.className}`}
             >
               Department / Employee
             </th>
             {dayRanges.map((d, idx) => (
               <th
                 key={d.day}
-                className={`px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+                className={`px-6 py-3 text-left text-[0.72rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
               >
                 <div className="flex flex-col gap-1">
                   <span>{d.day}</span>
@@ -78,13 +88,13 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
               </th>
             ))}
             <th
-              className={`px-4 py-3 text-left text-[0.7rem] uppercase tracking-[0.35em] text-white/60 ${plusJakarta.className}`}
+              className={`sticky right-0 z-20 bg-black/40 px-6 py-3 text-left text-[0.72rem] uppercase tracking-[0.35em] text-white/60 backdrop-blur-sm ${plusJakarta.className}`}
             >
               Total hours
             </th>
           </tr>
         </thead>
-        <tbody>
+      <tbody>
           {deptEmployees.map(({ dept, emps }) => (
             <Fragment key={dept.id}>
               <tr className="border-b border-white/10 bg-white/5">
@@ -97,7 +107,11 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
               </tr>
               {emps.map((emp) => (
                 <tr key={emp.id} className="border-b border-white/10 transition-colors hover:bg-white/5">
-                  <td className={`${spaceGrotesk.className} px-4 py-3 text-white`}>{emp.name}</td>
+                  <td
+                    className={`${spaceGrotesk.className} sticky left-0 z-10 bg-black/30 px-4 py-3 text-white backdrop-blur-sm`}
+                  >
+                    {emp.name}
+                  </td>
                   {dayRanges.map((d, idx) => {
                     const date = weekDates[idx];
                     const normalizedDate = normalizeDate(date);
@@ -107,9 +121,9 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                     });
                     
                     return (
-                      <td key={`${emp.id}-${d.day}`} className="px-4 py-3 align-top">
+                      <td key={`${emp.id}-${d.day}`} className="px-6 py-4 align-top">
                         <div
-                          className={`space-y-2 rounded-xl border px-3 py-2 shadow-sm ${
+                          className={`flex h-full flex-col space-y-3 rounded-xl border px-6 py-4 shadow-sm min-h-[150px] ${
                             d.closed ? 'border-red-500/40 bg-red-900/40 text-red-100' : 'border-white/10 bg-white/5 text-white'
                           }`}
                         >
@@ -119,7 +133,7 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                             </span>
                           ) : (
                             <>
-                              <div className="flex flex-col gap-2">
+                              <div className="flex h-full flex-col gap-2">
                                 {dayShifts.map((s) => (
                                   <div
                                     key={s.id}
@@ -130,44 +144,50 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                                         {s.start_time}–{s.end_time}
                                         {s.break_minutes ? ` · break ${s.break_minutes}m` : ''}
                                       </span>
-                                      <button
-                                        type="button"
-                                        className="inline-flex items-center rounded-full border border-red-300/50 px-2 py-1 text-[0.7rem] font-semibold text-red-200 transition hover:border-red-200 hover:bg-red-200/10"
-                                        onClick={() =>
-                                          startTransition(async () => {
-                                            const fd = new FormData();
-                                            fd.set('id', s.id);
-                                            fd.set('path', `/dashboard/planner/${locationId}/${planId}`);
-                                            const ok = await deleteShift(fd);
-                                            if (ok) {
-                                              setLocalShifts((prev) => prev.filter((x) => x.id !== s.id));
-                                            }
-                                            router.refresh();
-                                          })
-                                        }
-                                      >
-                                        Delete
-                                      </button>
+                                      {!readOnly && (
+                                        <button
+                                          type="button"
+                                          className="inline-flex items-center rounded-full border border-red-300/50 px-2 py-1 text-[0.7rem] font-semibold text-red-200 transition hover:border-red-200 hover:bg-red-200/10"
+                                          onClick={() =>
+                                            startTransition(async () => {
+                                              const fd = new FormData();
+                                              fd.set('id', s.id);
+                                              fd.set('path', `/dashboard/planner/${locationId}/${planId}`);
+                                              const ok = await deleteShift(fd);
+                                              if (ok) {
+                                                setLocalShifts((prev) => prev.filter((x) => x.id !== s.id));
+                                              }
+                                            })
+                                          }
+                                        >
+                                          Delete
+                                        </button>
+                                      )}
                                     </div>
                                     {s.notes && <p className="text-white/70">{s.notes}</p>}
                                   </div>
                                 ))}
                                 {dayShifts.length === 0 && <p className="text-[0.8rem] text-white/60">No shifts</p>}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setModal({
-                                      open: true,
-                                      employeeId: emp.id,
-                                      date,
-                                      start: d.start || '09:00',
-                                      end: d.end || '17:00',
-                                    })
-                                  }
-                                  className="inline-flex items-center justify-center rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
-                                >
-                                  Add shift
-                                </button>
+                                {!readOnly && (
+                                  <div className="mt-auto pt-4">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setModal({
+                                          open: true,
+                                          employeeId: emp.id,
+                                          departmentId: dept.id,
+                                          date,
+                                          start: d.start || '09:00',
+                                          end: d.end || '17:00',
+                                        })
+                                      }
+                                      className="inline-flex min-w-[110px] items-center justify-center rounded-full border border-white/25 bg-white/5 px-3 py-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
+                                    >
+                                      Add shift
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             </>
                           )}
@@ -175,7 +195,9 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                       </td>
                     );
                   })}
-                  <td className={`${spaceGrotesk.className} px-4 py-3 text-sm text-white`}>
+                  <td
+                    className={`${spaceGrotesk.className} sticky right-0 z-10 bg-black/30 px-6 py-3 text-sm text-white text-right backdrop-blur-sm`}
+                  >
                     {sumHoursForEmployee(emp.id).toFixed(1)}h / {Number(emp.hours_per_week ?? 0).toFixed(1)}h
                   </td>
                 </tr>
@@ -209,13 +231,13 @@ export default function PlannerBoardClient({ dayRanges, weekDates, deptEmployees
                     setLocalShifts((prev) => [...prev, created]);
                   }
                   setModal((m) => ({ ...m, open: false }));
-                  router.refresh();
                 });
               }}
             >
               <input type="hidden" name="planningId" value={planId} />
               <input type="hidden" name="locationId" value={locationId} />
               <input type="hidden" name="employeeId" value={modal.employeeId} />
+              <input type="hidden" name="departmentId" value={modal.departmentId} />
               <input type="hidden" name="date" value={modal.date} />
               <div className="flex gap-2">
                 <label className="flex flex-col text-xs text-white/70 w-1/2">

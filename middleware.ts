@@ -16,12 +16,16 @@ export async function middleware(req: NextRequest) {
   const isDashboard = pathname.startsWith('/dashboard');
   const isLogin = pathname === '/login';
 
-  if (isDashboard && (!isLoggedIn || !isAdmin)) {
-    const url = new URL('/login', req.url);
-    url.searchParams.set('message', 'Only company admins can access the dashboard.');
-    return NextResponse.redirect(url);
+  // Block dashboard for unauthenticated or non-admin users
+  if (isDashboard) {
+    if (!isLoggedIn || !isAdmin) {
+      const loginUrl = new URL('/login', req.url);
+     
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
+  // If already logged in as admin, redirect from /login to dashboard
   if (isLogin && isLoggedIn && isAdmin) {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }

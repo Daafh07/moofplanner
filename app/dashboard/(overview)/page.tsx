@@ -110,14 +110,14 @@ export default async function Page() {
                 Geen openstaande aanvragen.
               </p>
             )}
-            {approvals.map((item) => (
+            {/* {approvals.map((item) => (
               <div key={item.id} className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3">
                 <p className={`${spaceGrotesk.className} text-lg font-semibold`}>{item.title}</p>
                 <p className="text-sm text-white/70">
                   {item.detail} · {item.amount}
                 </p>
               </div>
-            ))}
+            ))} */}
           </div>
         </div>
         <div className="rounded-[32px] border border-white/10 bg-[#0b1208]/85 p-6">

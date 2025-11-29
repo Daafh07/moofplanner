@@ -58,17 +58,10 @@ export const authConfig = {
     },
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isAdmin = Boolean((auth?.token as { isAdmin?: boolean })?.isAdmin);
+      const isAdmin = Boolean((auth as { token?: { isAdmin?: boolean } } | null)?.token?.isAdmin);
       const isOnDashboard = nextUrl.pathname.startsWith('/dashboard');
       const isAuthPage = nextUrl.pathname === '/login';
       const loginUrl = new URL('/login', nextUrl);
-
-      if (isOnDashboard && (!isLoggedIn || !isAdmin)) {
-        if (!loginUrl.searchParams.has('message')) {
-          loginUrl.searchParams.set('message', 'Only company admins can access the dashboard.');
-        }
-        return NextResponse.redirect(loginUrl);
-      }
 
       if (isAuthPage && isLoggedIn && isAdmin) {
         return NextResponse.redirect(new URL('/dashboard', nextUrl));

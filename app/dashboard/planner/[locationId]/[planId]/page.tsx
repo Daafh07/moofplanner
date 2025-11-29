@@ -12,6 +12,7 @@ import {
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import PlannerBoardClient from './board-client';
 import Link from 'next/link';
+import { savePlannerDraft, publishPlannerDraft } from '@/app/lib/actions';
 
 function parseSchedule(hoursText: string | null) {
   try {
@@ -95,10 +96,11 @@ export default async function PlannerBoardPage({
   searchParams,
 }: {
   params: Promise<{ locationId: string; planId: string }>;
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; readOnly?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearch = await searchParams;
+  const readOnly = resolvedSearch.readOnly === '1' || resolvedSearch.readOnly === 'true';
   const session = await auth();
   if (!session?.user) redirect('/login');
   const userId = (session.user as { id?: string } | undefined)?.id;
@@ -207,23 +209,40 @@ export default async function PlannerBoardPage({
           shifts={shifts}
           planId={plan.id}
           locationId={location.id}
+          readOnly={readOnly}
         />
       </section>
 
-      <div className="flex flex-wrap justify-end gap-2">
+      {!readOnly && (
+      <form className="flex flex-wrap justify-end gap-2">
+        <input type="hidden" name="planningId" value={plan.id} />
+        <input type="hidden" name="locationId" value={location.id} />
+        <input type="hidden" name="week" value={resolvedSearch.week ?? ''} />
+        <input type="hidden" name="path" value={`/dashboard/planner/${location.id}/${plan.id}${resolvedSearch.week ? `?week=${encodeURIComponent(resolvedSearch.week)}` : ''}`} />
         <button
-          type="button"
+          type="submit"
+          formAction={async (formData) => {
+            'use server';
+            await savePlannerDraft(formData);
+            redirect('/dashboard/planner');
+          }}
           className={primaryPillClass}
         >
           Save
         </button>
         <button
-          type="button"
+          formAction={async (formData) => {
+            'use server';
+            await publishPlannerDraft(formData);
+            redirect('/dashboard/planner');
+          }}
+          type="submit"
           className={primaryPillClass}
         >
           Publish
         </button>
-      </div>
+      </form>
+      )}
     </main>
   );
 }

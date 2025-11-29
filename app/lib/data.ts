@@ -1,4 +1,4 @@
-import { Revenue, Employee, Department, PlanningTime, AdminUser, Location } from './definitions';
+import { Revenue, Employee, Department, PlanningTime, AdminUser, Location, PlanningDraft } from './definitions';
 import { formatCurrency } from './utils';
 import sql from './db';
 
@@ -221,6 +221,7 @@ export type Shift = {
   location_id: string;
   planning_id: string;
   employee_id: string;
+  department_id: string | null;
   date: string; // ISO date
   start_time: string; // HH:MM
   end_time: string; // HH:MM
@@ -239,8 +240,8 @@ export async function fetchShiftsByPlanning(planningId?: string) {
     `;
     return rows;
   } catch (err) {
-    console.error('Database Error:', err);
-    throw new Error('Failed to fetch shifts.');
+    console.error('Database Error: fetchShiftsByPlanning failed', err);
+    return [];
   }
 }
 
@@ -256,6 +257,54 @@ export async function fetchAdminsByUser(userId: string) {
       ORDER BY ca.created_at DESC
     `;
     return admins;
+  } catch (err) {
+    console.error('Database Error:', err);
+    return [];
+  }
+}
+
+export async function fetchDraftsByUser(userId: string) {
+  try {
+    const drafts = await sql<PlanningDraft[]>`
+      WITH company_scope AS (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      SELECT
+        d.*,
+        l.name AS location_name,
+        p.name AS planning_name
+      FROM planning_drafts d
+      JOIN company_scope cs ON d.company_id = cs.company_id
+      LEFT JOIN locations l ON l.id = d.location_id
+      LEFT JOIN planning_times p ON p.id = d.planning_id
+      WHERE d.status = 'draft'
+      ORDER BY d.updated_at DESC, d.created_at DESC
+    `;
+    return drafts;
+  } catch (err) {
+    console.error('Database Error:', err);
+    return [];
+  }
+}
+
+export async function fetchPublishedDraftsByUser(userId: string) {
+  try {
+    const drafts = await sql<PlanningDraft[]>`
+      WITH company_scope AS (
+        SELECT company_id FROM company_admins WHERE user_id = ${userId} LIMIT 1
+      )
+      SELECT
+        d.*,
+        l.name AS location_name,
+        p.name AS planning_name
+      FROM planning_drafts d
+      JOIN company_scope cs ON d.company_id = cs.company_id
+      LEFT JOIN locations l ON l.id = d.location_id
+      LEFT JOIN planning_times p ON p.id = d.planning_id
+      WHERE d.status = 'published'
+      ORDER BY d.week DESC NULLS LAST, d.updated_at DESC
+    `;
+    return drafts;
   } catch (err) {
     console.error('Database Error:', err);
     return [];

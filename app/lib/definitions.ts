@@ -62,6 +62,20 @@ export type Location = {
   description: string | null;
 };
 
+export type PlanningDraft = {
+  id: string;
+  company_id: string;
+  location_id: string;
+  planning_id: string;
+  week: string | null;
+  status: string;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  location_name?: string | null;
+  planning_name?: string | null;
+};
+
 export type AdminUser = {
   user_id: string;
   company_id: string;

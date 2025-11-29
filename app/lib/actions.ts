@@ -155,37 +155,25 @@ export async function registerUser(
     return { status: 'error', message: 'Failed to create account. Try again.' };
   }
 
-  // Optional metadata inserts; ignore errors if tables don't exist yet.
+  // Company + admin inserts aligned to current schema.
   try {
     await sql`
       INSERT INTO companies (
         id,
         name,
-        personal_email,
-        headcount,
         region,
         plan,
         billing_mode,
         seat_limit,
-        vat_number,
-        registration_id,
-        billing_address,
-        industry,
         created_at
       )
       VALUES (
         ${companyId},
         ${companyName},
-        ${personalEmail},
-        ${headcount},
         ${region},
         ${plan},
         ${rule.billingMode},
         ${rule.seatLimit},
-        ${vatNumber},
-        ${registrationId},
-        ${billingAddress},
-        ${industry},
         NOW()
       )
     `;
@@ -238,15 +226,52 @@ const EmployeeSchema = z.object({
 });
 
 async function ensureShiftsTable() {
-  // No-op: schema should be managed via migrations. Kept to avoid runtime notices.
-  return;
+  const g = global as unknown as { _shiftDeptEnsured?: boolean };
+  if (g._shiftDeptEnsured) return;
+  try {
+    await sql`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS department_id uuid`;
+    g._shiftDeptEnsured = true;
+  } catch (err) {
+    console.error('ensureShiftsTable failed', err);
+  }
 }
 
 async function ensureEmployeeLocationArray() {
+  // Run once per process to avoid repeated ALTER warnings.
+  if ((global as unknown as { _locArrayEnsured?: boolean })._locArrayEnsured) return;
   try {
     await sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_ids text[]`;
+    (global as unknown as { _locArrayEnsured?: boolean })._locArrayEnsured = true;
   } catch (err) {
     console.error('ensureEmployeeLocationArray failed', err);
+  }
+}
+
+async function ensurePlannerDraftsTable() {
+  const g = global as unknown as { _plannerDraftsEnsured?: boolean };
+  if (g._plannerDraftsEnsured) return;
+  try {
+    await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS planning_drafts (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        company_id uuid NOT NULL,
+        location_id uuid NOT NULL,
+        planning_id uuid NOT NULL,
+        week text,
+        status text NOT NULL DEFAULT 'draft',
+        published_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_planning_drafts_company ON planning_drafts(company_id)`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_planning_drafts_unique ON planning_drafts(company_id, planning_id, week)`;
+    await sql`ALTER TABLE planning_drafts ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'draft'`;
+    await sql`ALTER TABLE planning_drafts ADD COLUMN IF NOT EXISTS published_at timestamptz`;
+    g._plannerDraftsEnsured = true;
+  } catch (err) {
+    console.error('ensurePlannerDraftsTable failed', err);
   }
 }
 
@@ -254,6 +279,7 @@ const ShiftSchema = z.object({
   planningId: z.string().uuid(),
   locationId: z.string().uuid(),
   employeeId: z.string().uuid(),
+  departmentId: z.string().uuid().optional(),
   date: z.string().min(8),
   startTime: z.string().min(4),
   endTime: z.string().min(4),
@@ -269,6 +295,7 @@ type CreatedShift = {
   end_time: string;
   break_minutes: number | null;
   notes: string | null;
+  department_id: string | null;
 };
 
 export async function createShift(formData: FormData): Promise<CreatedShift | null> {
@@ -283,6 +310,7 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     planningId: formData.get('planningId'),
     locationId: formData.get('locationId'),
     employeeId: formData.get('employeeId'),
+    departmentId: formData.get('departmentId'),
     date: formData.get('date'),
     startTime: formData.get('startTime'),
     endTime: formData.get('endTime'),
@@ -295,7 +323,8 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     return null;
   }
 
-  const { planningId, locationId, employeeId, date, startTime, endTime, notes, breakMinutes } = parsed.data;
+  const { planningId, locationId, employeeId, departmentId, date, startTime, endTime, notes, breakMinutes } =
+    parsed.data;
   
   if (endTime <= startTime) {
     console.error('End time must be after start time');
@@ -309,9 +338,9 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     const normalizedDate = date.includes('T') ? date.split('T')[0] : date;
     
     const inserted = await sql<CreatedShift[]>`
-      INSERT INTO shifts (company_id, location_id, planning_id, employee_id, date, start_time, end_time, break_minutes, notes)
-      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${normalizedDate}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
-      RETURNING id, employee_id, date::text as date, start_time, end_time, break_minutes, notes
+      INSERT INTO shifts (company_id, location_id, planning_id, employee_id, department_id, date, start_time, end_time, break_minutes, notes)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${departmentId ?? null}, ${normalizedDate}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
+      RETURNING id, employee_id, department_id, date::text as date, start_time, end_time, break_minutes, notes
     `;
     
     if (path) revalidatePath(path);
@@ -346,6 +375,105 @@ export async function deleteShift(formData: FormData): Promise<boolean> {
   } catch (err) {
     console.error('Delete shift failed:', err);
     return false;
+  }
+}
+
+export type DraftState = {
+  status: 'idle' | 'success' | 'error';
+  message?: string;
+};
+
+export async function savePlannerDraft(formData: FormData): Promise<DraftState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'Missing user.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked.' };
+
+    const planningVal = formData.get('planningId');
+    const locationVal = formData.get('locationId');
+    const weekVal = formData.get('week');
+    const pathVal = formData.get('path');
+
+    const planningId = typeof planningVal === 'string' ? planningVal : '';
+    const locationId = typeof locationVal === 'string' ? locationVal : '';
+    const week = typeof weekVal === 'string' ? weekVal : null;
+    const path = typeof pathVal === 'string' ? pathVal : '';
+    if (!planningId || !locationId) {
+      return { status: 'error', message: 'Missing planning or location.' };
+    }
+
+    await ensurePlannerDraftsTable();
+    await sql`
+      INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status, published_at)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${week}, 'draft', NULL)
+      ON CONFLICT (company_id, planning_id, week)
+      DO UPDATE SET status='draft', published_at=NULL, updated_at = now()
+    `;
+    revalidatePath('/dashboard/planner');
+    if (path) revalidatePath(path);
+    return { status: 'success', message: 'Draft saved.' };
+  } catch (err) {
+    console.error('Save draft failed', err);
+    return { status: 'error', message: 'Could not save draft.' };
+  }
+}
+
+export async function deletePlannerDraft(formData: FormData): Promise<DraftState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'Missing user.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked.' };
+    const id = String(formData.get('id') ?? '');
+    if (!id) return { status: 'error', message: 'Missing draft id.' };
+
+    await ensurePlannerDraftsTable();
+    const res = await sql`DELETE FROM planning_drafts WHERE id=${id} AND company_id=${companyId}`;
+    if (res.count === 0) {
+      return { status: 'error', message: 'Draft not found.' };
+    }
+    return { status: 'success', message: 'Draft deleted.' };
+  } catch (err) {
+    console.error('Delete draft failed', err);
+    return { status: 'error', message: 'Could not delete draft.' };
+  }
+}
+
+export async function publishPlannerDraft(formData: FormData): Promise<DraftState> {
+  try {
+    const session = await ensureAuthenticated();
+    const userId = (session.user as { id?: string } | undefined)?.id;
+    if (!userId) return { status: 'error', message: 'Missing user.' };
+    const companyId = await getCompanyIdForUser(userId);
+    if (!companyId) return { status: 'error', message: 'No company linked.' };
+
+    const planningVal = formData.get('planningId');
+    const locationVal = formData.get('locationId');
+    const weekVal = formData.get('week');
+    const pathVal = formData.get('path');
+
+    const planningId = typeof planningVal === 'string' ? planningVal : '';
+    const locationId = typeof locationVal === 'string' ? locationVal : '';
+    const week = typeof weekVal === 'string' ? weekVal : null;
+    const path = typeof pathVal === 'string' ? pathVal : '';
+    if (!planningId || !locationId) return { status: 'error', message: 'Missing planning or location.' };
+
+    await ensurePlannerDraftsTable();
+    await sql`
+      INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status, published_at)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${week}, 'published', now())
+      ON CONFLICT (company_id, planning_id, week)
+      DO UPDATE SET status='published', published_at=now(), updated_at=now()
+    `;
+    revalidatePath('/dashboard/planner');
+    if (path) revalidatePath(path);
+    return { status: 'success', message: 'Published.' };
+  } catch (err) {
+    console.error('Publish draft failed', err);
+    return { status: 'error', message: 'Could not publish.' };
   }
 }
 

@@ -22,11 +22,13 @@ export default function PlannerLocationClient({
   plans,
   employees,
   departments,
+  selectedWeek,
 }: {
   location: LocationData;
   plans: PlanningTime[];
   employees: Employee[];
   departments: Department[];
+  selectedWeek?: string;
 }) {
   const defaultPlan = useMemo(() => plans.find((p) => p.is_default) ?? plans[0], [plans]);
   const [selectedId, setSelectedId] = useState(defaultPlan?.id ?? plans[0]?.id ?? null);
@@ -37,6 +39,7 @@ export default function PlannerLocationClient({
     return e.location_id === location.id || list.includes(location.id);
   });
   const departmentMap = useMemo(() => Object.fromEntries(departments.map((d) => [d.id, d.name])), [departments]);
+  const weekParam = selectedWeek ?? '';
 
   return (
     <main className="space-y-8 rounded-[40px] border border-white/10 bg-gradient-to-br from-[#1a2814]/90 via-[#0d140b]/95 to-[#050805] p-8 shadow-[0_40px_140px_rgba(5,10,5,0.65)] text-white">
@@ -45,6 +48,7 @@ export default function PlannerLocationClient({
           <p className={`${plusJakarta.className} text-xs uppercase tracking-[0.5em] text-white/60`}>Planner</p>
           <h1 className={`${spaceGrotesk.className} text-3xl font-semibold`}>{location.name}</h1>
           {location.description && <p className="text-sm text-white/70">{location.description}</p>}
+          {weekParam && <p className="text-xs text-white/60">Week: {weekParam}</p>}
         </div>
         <Link
           href="/dashboard/planner"
@@ -145,7 +149,7 @@ export default function PlannerLocationClient({
                   {locationEmployees.length} employees in this location
                 </div>
                 <Link
-                  href={`/dashboard/planner/${location.id}/${selected.id}`}
+                  href={`/dashboard/planner/${location.id}/${selected.id}${weekParam ? `?week=${encodeURIComponent(weekParam)}` : ''}`}
                   className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
                 >
                   Open planner
