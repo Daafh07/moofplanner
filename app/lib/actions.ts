@@ -298,6 +298,7 @@ type CreatedShift = {
   department_id: string | null;
 };
 
+// Update the createShift function to accept draftId
 export async function createShift(formData: FormData): Promise<CreatedShift | null> {
   const session = await ensureAuthenticated();
   const userId = (session.user as { id?: string } | undefined)?.id;
@@ -337,9 +338,29 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     // Ensure date is in YYYY-MM-DD format
     const normalizedDate = date.includes('T') ? date.split('T')[0] : date;
     
+    // Get the week from formData to find or create the draft
+    const week = typeof formData.get('week') === 'string' ? (formData.get('week') as string) : null;
+    
+    // Find or create the draft for this planning/week combination
+    await ensurePlannerDraftsTable();
+    const draftResult = await sql<{ id: string }[]>`
+      INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${week}, 'draft')
+      ON CONFLICT (company_id, planning_id, week)
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+    `;
+    const draftId = draftResult[0]?.id;
+    
+    if (!draftId) {
+      console.error('Failed to get draft_id');
+      return null;
+    }
+    
+    // Insert shift with draft_id
     const inserted = await sql<CreatedShift[]>`
-      INSERT INTO shifts (company_id, location_id, planning_id, employee_id, department_id, date, start_time, end_time, break_minutes, notes)
-      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${departmentId ?? null}, ${normalizedDate}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null})
+      INSERT INTO shifts (company_id, location_id, planning_id, employee_id, department_id, date, start_time, end_time, break_minutes, notes, draft_id)
+      VALUES (${companyId}, ${locationId}, ${planningId}, ${employeeId}, ${departmentId ?? null}, ${normalizedDate}, ${startTime}, ${endTime}, ${breakMinutes ?? 0}, ${notes ?? null}, ${draftId})
       RETURNING id, employee_id, department_id, date::text as date, start_time, end_time, break_minutes, notes
     `;
     
@@ -358,31 +379,7 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
   }
 }
 
-export async function deleteShift(formData: FormData): Promise<boolean> {
-  const session = await ensureAuthenticated();
-  const userId = (session.user as { id?: string } | undefined)?.id;
-  if (!userId) return false;
-  const companyId = await getCompanyIdForUser(userId);
-  if (!companyId) return false;
-  const id = formData.get('id');
-  if (!id || typeof id !== 'string') return false;
-  const path = typeof formData.get('path') === 'string' ? (formData.get('path') as string) : '';
-  try {
-    await ensureShiftsTable();
-    await sql`DELETE FROM shifts WHERE id = ${id} AND company_id = ${companyId}`;
-    if (path) revalidatePath(path);
-    return true;
-  } catch (err) {
-    console.error('Delete shift failed:', err);
-    return false;
-  }
-}
-
-export type DraftState = {
-  status: 'idle' | 'success' | 'error';
-  message?: string;
-};
-
+// Update savePlannerDraft to NOT delete shifts
 export async function savePlannerDraft(formData: FormData): Promise<DraftState> {
   try {
     const session = await ensureAuthenticated();
@@ -420,6 +417,7 @@ export async function savePlannerDraft(formData: FormData): Promise<DraftState> 
   }
 }
 
+// Update deletePlannerDraft to cascade delete shifts via draft_id
 export async function deletePlannerDraft(formData: FormData): Promise<DraftState> {
   try {
     const session = await ensureAuthenticated();
@@ -431,19 +429,12 @@ export async function deletePlannerDraft(formData: FormData): Promise<DraftState
     if (!id) return { status: 'error', message: 'Missing draft id.' };
 
     await ensurePlannerDraftsTable();
-    // Delete associated shifts for this planning/week to keep storage clean.
-    const res = await sql.begin(async (trx) => {
-      const draftRows = await trx<{ planning_id: string; location_id: string; week: string | null }[]>`
-        DELETE FROM planning_drafts WHERE id=${id} AND company_id=${companyId}
-        RETURNING planning_id, location_id, week
-      `;
-      if (draftRows.length === 0) return { count: 0 };
-      const draft = draftRows[0];
-      // If week is present, scope by week range; otherwise delete all shifts for that planning.
-      // Delete shifts for that planning (regardless of week) to keep storage clean.
-      await trx`DELETE FROM shifts WHERE planning_id = ${draft.planning_id}`;
-      return { count: 1 };
-    });
+    // The ON DELETE CASCADE on the foreign key will automatically delete associated shifts
+    const res = await sql`
+      DELETE FROM planning_drafts WHERE id=${id} AND company_id=${companyId}
+      RETURNING id
+    `;
+    
     if (res.count === 0) {
       return { status: 'error', message: 'Draft not found.' };
     }
@@ -455,6 +446,7 @@ export async function deletePlannerDraft(formData: FormData): Promise<DraftState
   }
 }
 
+// Update publishPlannerDraft
 export async function publishPlannerDraft(formData: FormData): Promise<DraftState> {
   try {
     const session = await ensureAuthenticated();
