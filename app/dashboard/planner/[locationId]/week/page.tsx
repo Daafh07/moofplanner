@@ -54,7 +54,11 @@ export default async function PlannerWeekPage({ params }: { params: Promise<{ lo
             Selecteer eerst voor welke week je wilt plannen. Daarna kies je de planningstijd/blok.
           </p>
         </div>
-        <form className="space-y-4">
+        <form
+          className="space-y-4"
+          action={`/dashboard/planner/${location.id}`}
+          method="GET"
+        >
           <label className="block text-sm text-white/80">
             <span className={`${plusJakarta.className} mb-2 block text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
               Weeknummer
@@ -66,15 +70,7 @@ export default async function PlannerWeekPage({ params }: { params: Promise<{ lo
               className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/40 focus:border-[#d2ff00] focus:outline-none focus:ring-2 focus:ring-[#d2ff00]/30"
             />
           </label>
-          <button
-            type="submit"
-            formAction={async (formData) => {
-              'use server';
-              const week = (formData.get('week') as string) ?? defaultWeek;
-              redirect(`/dashboard/planner/${location.id}?week=${encodeURIComponent(week)}`);
-            }}
-            className="cta-primary w-full justify-center"
-          >
+          <button type="submit" className="cta-primary w-full justify-center">
             Verder naar planningstijden
           </button>
         </form>

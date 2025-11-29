@@ -253,6 +253,8 @@ export default function PlannerBoardClient({
               <input type="hidden" name="employeeId" value={modal.employeeId} />
               <input type="hidden" name="departmentId" value={modal.departmentId} />
               <input type="hidden" name="date" value={modal.date} />
+              <input type="hidden" name="week" value={week ?? ''} />
+              <input type="hidden" name="draftId" value={draftId ?? ''} />
               <div className="flex gap-2">
                 <label className="flex flex-col text-xs text-white/70 w-1/2">
                   Start

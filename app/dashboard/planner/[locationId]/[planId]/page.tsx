@@ -12,8 +12,10 @@ import {
 import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import PlannerBoardClient from './board-client';
 import Link from 'next/link';
-import { savePlannerDraft, publishPlannerDraft } from '@/app/lib/actions';
 import sql from '@/app/lib/db';
+import { savePlannerDraft, publishPlannerDraft } from '@/app/lib/actions';
+import { normalizeWeekValue } from '@/app/lib/week';
+import PlannerBoardActions from './planner-board-actions';
 
 // ... (keep all your helper functions: parseSchedule, dayOrder, formatLocal, startOfISOWeek, buildWeekDates, durationHours, formatWeekRangeLabel)
 
@@ -79,6 +81,18 @@ function formatWeekRangeLabel(weekDates: string[]) {
   }
 }
 
+function isoWeekFromDate(dateStr: string | null | undefined) {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null;
+  const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${target.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
 export const metadata: Metadata = {
   title: 'Planner · Board',
 };
@@ -96,6 +110,8 @@ export default async function PlannerBoardPage({
   const resolvedParams = await params;
   const resolvedSearch = await searchParams;
   const readOnly = resolvedSearch.readOnly === '1' || resolvedSearch.readOnly === 'true';
+  const weekParamRaw = typeof resolvedSearch.week === 'string' ? resolvedSearch.week : '';
+  const dbWeek = normalizeWeekValue(weekParamRaw);
   const session = await auth();
   if (!session?.user) redirect('/login');
   const userId = (session.user as { id?: string } | undefined)?.id;
@@ -123,18 +139,19 @@ export default async function PlannerBoardPage({
 
   if (!companyId) redirect('/login');
 
-  const week = typeof resolvedSearch.week === 'string' ? resolvedSearch.week : null;
-  
+  const draftIdFromUrl = resolvedSearch.draftId;
+  const weekKeyForLookup = dbWeek || null;
+  let effectiveWeek: string | null = weekParamRaw || null;
+
   // Find or create draft
-  let draftId = resolvedSearch.draftId;
+  let draftId = draftIdFromUrl;
   if (!draftId) {
     const existingDraft = await sql<{ id: string }[]>`
       SELECT id FROM planning_drafts
       WHERE company_id = ${companyId}
         AND location_id = ${location.id}
         AND planning_id = ${plan.id}
-        AND week = ${week}
-        AND status = 'draft'
+        AND week = ${weekKeyForLookup}
       LIMIT 1
     `;
     
@@ -144,7 +161,9 @@ export default async function PlannerBoardPage({
       // Create new draft
       const newDraft = await sql<{ id: string }[]>`
         INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status)
-        VALUES (${companyId}, ${location.id}, ${plan.id}, ${week}, 'draft')
+        VALUES (${companyId}, ${location.id}, ${plan.id}, ${weekKeyForLookup}, 'draft')
+        ON CONFLICT (company_id, planning_id, week)
+        DO UPDATE SET updated_at = now()
         RETURNING id
       `;
       draftId = newDraft[0].id;
@@ -152,14 +171,41 @@ export default async function PlannerBoardPage({
     
     // Redirect to include draftId in URL
     const params = new URLSearchParams();
-    if (week) params.set('week', week);
+    if (weekKeyForLookup) params.set('week', weekKeyForLookup);
     if (readOnly) params.set('readOnly', '1');
     params.set('draftId', draftId);
     redirect(`/dashboard/planner/${location.id}/${plan.id}?${params.toString()}`);
   }
 
+  if (draftId) {
+    const draftMeta = await sql<{ week: string | null }[]>`
+      SELECT week FROM planning_drafts WHERE id = ${draftId} AND company_id = ${companyId} LIMIT 1
+    `;
+    const draftWeek = draftMeta[0]?.week ?? null;
+    if (!effectiveWeek && draftWeek) effectiveWeek = draftWeek;
+  }
+
   // Fetch shifts for this specific draft
   const shifts = draftId ? await fetchShiftsByDraft(draftId) : [];
+  // Fallback: if nothing returned for this draft but we know the week, pull shifts by plan/week.
+  let resolvedShifts = shifts;
+  if (resolvedShifts.length === 0 && weekKeyForLookup && companyId) {
+    const fallback = await sql<Shift[]>`
+      SELECT *
+      FROM shifts
+      WHERE company_id = ${companyId}
+        AND planning_id = ${plan.id}
+        AND draft_id = ${draftId}
+      ORDER BY date ASC, start_time ASC
+    `;
+    resolvedShifts = fallback;
+  }
+  const shiftsToUse = resolvedShifts;
+  if ((!effectiveWeek || effectiveWeek === 'no-week') && shiftsToUse.length > 0) {
+    const firstDate = shiftsToUse[0]?.date;
+    const isoWeek = isoWeekFromDate(firstDate);
+    if (isoWeek) effectiveWeek = isoWeek;
+  }
 
   const schedule = parseSchedule(plan.hours_text);
   const locationEmployees = employees.filter((e) => {
@@ -175,7 +221,8 @@ export default async function PlannerBoardPage({
   }));
   
   const dayLabels = dayRanges.map((d) => d.day);
-  const weekDates = buildWeekDates(dayLabels, resolvedSearch.week);
+  const weekStringForDates = effectiveWeek && effectiveWeek !== 'no-week' ? effectiveWeek : undefined;
+  const weekDates = buildWeekDates(dayLabels, weekStringForDates);
   
   const deptEmployees = departments
     .map((dept) => ({
@@ -239,45 +286,23 @@ export default async function PlannerBoardPage({
           dayRanges={dayRanges}
           weekDates={weekDates}
           deptEmployees={deptEmployees}
-          shifts={shifts}
+          shifts={shiftsToUse}
           planId={plan.id}
           locationId={location.id}
           draftId={draftId}
-          week={week ?? undefined}
+          week={weekStringForDates ?? ''}
           readOnly={readOnly}
         />
       </section>
 
       {!readOnly && (
-        <form className="flex flex-wrap justify-end gap-2">
-          <input type="hidden" name="planningId" value={plan.id} />
-          <input type="hidden" name="locationId" value={location.id} />
-          <input type="hidden" name="week" value={resolvedSearch.week ?? ''} />
-          <input type="hidden" name="draftId" value={draftId} />
-          <input type="hidden" name="path" value={`/dashboard/planner/${location.id}/${plan.id}?draftId=${draftId}${resolvedSearch.week ? `&week=${encodeURIComponent(resolvedSearch.week)}` : ''}`} />
-          <button
-            type="submit"
-            formAction={async (formData) => {
-              'use server';
-              await savePlannerDraft(formData);
-              redirect('/dashboard/planner');
-            }}
-            className={primaryPillClass}
-          >
-            Save
-          </button>
-          <button
-            formAction={async (formData) => {
-              'use server';
-              await publishPlannerDraft(formData);
-              redirect('/dashboard/planner');
-            }}
-            type="submit"
-            className={primaryPillClass}
-          >
-            Publish
-          </button>
-        </form>
+        <PlannerBoardActions
+          planId={plan.id}
+          locationId={location.id}
+          week={weekStringForDates ?? ''}
+          draftId={draftId}
+          primaryPillClass={primaryPillClass}
+        />
       )}
     </main>
   );

@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import type { User } from '@/app/lib/definitions';
 import { redirect } from 'next/navigation';
 import sql from './db';
+import { normalizeWeekValue } from '@/app/lib/week';
  
 let shiftsEnsured = true; // schema should be created via migration; skip runtime DDL
 
@@ -229,21 +230,48 @@ async function ensureShiftsTable() {
   const g = global as unknown as { _shiftDeptEnsured?: boolean };
   if (g._shiftDeptEnsured) return;
   try {
-    await sql`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS department_id uuid`;
-    g._shiftDeptEnsured = true;
+    const [{ exists }] = await sql<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'shifts'
+          AND column_name = 'department_id'
+      ) AS exists
+    `;
+    if (!exists) {
+      await sql`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS department_id uuid`;
+    }
+    g._shiftDeptEnsured = true; // mark as done even if column already present
   } catch (err) {
     console.error('ensureShiftsTable failed', err);
+    g._shiftDeptEnsured = true; // avoid retry loops that cause repeated timeouts
   }
 }
 
 async function ensureEmployeeLocationArray() {
-  // Run once per process to avoid repeated ALTER warnings.
-  if ((global as unknown as { _locArrayEnsured?: boolean })._locArrayEnsured) return;
+  // Run once per process to avoid repeated DDL/locks; check first to keep the call cheap.
+  const g = global as unknown as { _locArrayEnsured?: boolean };
+  if (g._locArrayEnsured) return;
   try {
+    const [{ exists }] = await sql<{ exists: boolean }[]>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'employees'
+          AND column_name = 'location_ids'
+      ) AS exists
+    `;
+    if (exists) {
+      g._locArrayEnsured = true;
+      return;
+    }
+
     await sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_ids text[]`;
-    (global as unknown as { _locArrayEnsured?: boolean })._locArrayEnsured = true;
+    g._locArrayEnsured = true;
   } catch (err) {
     console.error('ensureEmployeeLocationArray failed', err);
+    // Avoid hammering the DB with repeat attempts if the column is already there but ALTER was blocked.
+    g._locArrayEnsured = true;
   }
 }
 
@@ -251,6 +279,14 @@ async function ensurePlannerDraftsTable() {
   const g = global as unknown as { _plannerDraftsEnsured?: boolean };
   if (g._plannerDraftsEnsured) return;
   try {
+    const [{ exists }] = await sql<{ exists: boolean }[]>`
+      SELECT to_regclass('public.planning_drafts') IS NOT NULL AS exists
+    `;
+    if (exists) {
+      g._plannerDraftsEnsured = true;
+      return;
+    }
+
     await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
     await sql`
       CREATE TABLE IF NOT EXISTS planning_drafts (
@@ -272,6 +308,7 @@ async function ensurePlannerDraftsTable() {
     g._plannerDraftsEnsured = true;
   } catch (err) {
     console.error('ensurePlannerDraftsTable failed', err);
+    g._plannerDraftsEnsured = true; // prevent repeated blocking attempts
   }
 }
 
@@ -285,6 +322,7 @@ const ShiftSchema = z.object({
   endTime: z.string().min(4),
   notes: z.string().optional(),
   breakMinutes: z.coerce.number().optional(),
+  draftId: z.string().uuid().optional(),
 });
 
 type CreatedShift = {
@@ -317,6 +355,7 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     endTime: formData.get('endTime'),
     notes: formData.get('notes'),
     breakMinutes: formData.get('breakMinutes'),
+    draftId: formData.get('draftId'),
   });
   
   if (!parsed.success) {
@@ -324,8 +363,18 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     return null;
   }
 
-  const { planningId, locationId, employeeId, departmentId, date, startTime, endTime, notes, breakMinutes } =
-    parsed.data;
+  const {
+    planningId,
+    locationId,
+    employeeId,
+    departmentId,
+    date,
+    startTime,
+    endTime,
+    notes,
+    breakMinutes,
+    draftId: incomingDraftId,
+  } = parsed.data;
   
   if (endTime <= startTime) {
     console.error('End time must be after start time');
@@ -338,19 +387,35 @@ export async function createShift(formData: FormData): Promise<CreatedShift | nu
     // Ensure date is in YYYY-MM-DD format
     const normalizedDate = date.includes('T') ? date.split('T')[0] : date;
     
-    // Get the week from formData to find or create the draft
-    const week = typeof formData.get('week') === 'string' ? (formData.get('week') as string) : null;
-    
-    // Find or create the draft for this planning/week combination
-    await ensurePlannerDraftsTable();
-    const draftResult = await sql<{ id: string }[]>`
-      INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status)
-      VALUES (${companyId}, ${locationId}, ${planningId}, ${week}, 'draft')
-      ON CONFLICT (company_id, planning_id, week)
-      DO UPDATE SET updated_at = now()
-      RETURNING id
-    `;
-    const draftId = draftResult[0]?.id;
+    // Prefer an explicit draftId; otherwise find/create by week.
+    let draftId = incomingDraftId ?? null;
+    if (draftId) {
+      const validDraft = await sql<{ id: string }[]>`
+        SELECT id FROM planning_drafts
+        WHERE id = ${draftId}
+          AND company_id = ${companyId}
+          AND planning_id = ${planningId}
+          AND location_id = ${locationId}
+        LIMIT 1
+      `;
+      draftId = validDraft[0]?.id ?? null;
+    }
+
+    if (!draftId) {
+      // Get the week from formData to find or create the draft
+      const week = normalizeWeekValue(formData.get('week'));
+      
+      // Find or create the draft for this planning/week combination
+      await ensurePlannerDraftsTable();
+      const draftResult = await sql<{ id: string }[]>`
+        INSERT INTO planning_drafts (company_id, location_id, planning_id, week, status)
+        VALUES (${companyId}, ${locationId}, ${planningId}, ${week}, 'draft')
+        ON CONFLICT (company_id, planning_id, week)
+        DO UPDATE SET updated_at = now()
+        RETURNING id
+      `;
+      draftId = draftResult[0]?.id ?? null;
+    }
     
     if (!draftId) {
       console.error('Failed to get draft_id');
@@ -425,7 +490,7 @@ export async function savePlannerDraft(formData: FormData): Promise<DraftState> 
 
     const planningId = typeof planningVal === 'string' ? planningVal : '';
     const locationId = typeof locationVal === 'string' ? locationVal : '';
-    const week = typeof weekVal === 'string' ? weekVal : null;
+    const week = normalizeWeekValue(weekVal);
     const path = typeof pathVal === 'string' ? pathVal : '';
     if (!planningId || !locationId) {
       return { status: 'error', message: 'Missing planning or location.' };
@@ -491,7 +556,7 @@ export async function publishPlannerDraft(formData: FormData): Promise<DraftStat
 
     const planningId = typeof planningVal === 'string' ? planningVal : '';
     const locationId = typeof locationVal === 'string' ? locationVal : '';
-    const week = typeof weekVal === 'string' ? weekVal : null;
+    const week = normalizeWeekValue(weekVal);
     const path = typeof pathVal === 'string' ? pathVal : '';
     if (!planningId || !locationId) return { status: 'error', message: 'Missing planning or location.' };
 

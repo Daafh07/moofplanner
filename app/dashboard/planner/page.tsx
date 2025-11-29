@@ -71,7 +71,7 @@ export default async function PlannerPage() {
               <div key={draft.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
                 <div className="space-y-1">
                   <p className={`${plusJakarta.className} text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
-                    {draft.week ?? 'No week'}
+                    {draft.week && draft.week !== 'no-week' ? draft.week : 'No week'}
                   </p>
                   <p className={`${spaceGrotesk.className} text-lg font-semibold text-white`}>
                     {draft.location_name ?? 'Location'} · {draft.planning_name ?? 'Plan'}
@@ -79,7 +79,7 @@ export default async function PlannerPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/dashboard/planner/${draft.location_id}/${draft.planning_id}${draft.week ? `?week=${encodeURIComponent(draft.week)}` : ''}`}
+                    href={`/dashboard/planner/${draft.location_id}/${draft.planning_id}?draftId=${draft.id}${draft.week ? `&week=${encodeURIComponent(draft.week)}` : ''}`}
                     className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
                   >
                     Edit
@@ -119,7 +119,7 @@ export default async function PlannerPage() {
               <div key={item.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
                 <div className="space-y-1">
                   <p className={`${plusJakarta.className} text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
-                    {item.week ?? 'No week'}
+                    {item.week && item.week !== 'no-week' ? item.week : 'No week'}
                   </p>
                   <p className={`${spaceGrotesk.className} text-lg font-semibold text-white`}>
                     {item.location_name ?? 'Location'} · {item.planning_name ?? 'Plan'}
@@ -127,13 +127,13 @@ export default async function PlannerPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/dashboard/planner/${item.location_id}/${item.planning_id}${item.week ? `?week=${encodeURIComponent(item.week)}&readOnly=1` : '?readOnly=1'}`}
+                    href={`/dashboard/planner/${item.location_id}/${item.planning_id}?draftId=${item.id}${item.week ? `&week=${encodeURIComponent(item.week)}&readOnly=1` : '&readOnly=1'}`}
                     className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
                   >
                     View
                   </Link>
                   <Link
-                    href={`/dashboard/planner/${item.location_id}/${item.planning_id}${item.week ? `?week=${encodeURIComponent(item.week)}&readOnly=1` : '?readOnly=1'}`}
+                    href={`/dashboard/planner/${item.location_id}/${item.planning_id}?draftId=${item.id}${item.week ? `&week=${encodeURIComponent(item.week)}&readOnly=1` : '&readOnly=1'}`}
                     className="rounded-full border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
                   >
                     Print
