@@ -22,7 +22,7 @@ type NavLink = {
 };
 
 const links: NavLink[] = [
-  { name: 'Overzicht', href: '/dashboard', icon: HomeIcon },
+  { name: 'Overview', href: '/dashboard', icon: HomeIcon },
   {
     name: 'Organization',
     href: '/dashboard/organization',
@@ -40,8 +40,8 @@ const links: NavLink[] = [
     ],
   },
   { name: 'Planner', href: '/dashboard/planner', icon: CalendarDaysIcon },
-  { name: 'Prognose', href: '/dashboard/forecasts', icon: PresentationChartLineIcon },
-  { name: 'Instellingen', href: '/dashboard/settings', icon: Cog6ToothIcon },
+  { name: 'Forecasts', href: '/dashboard/forecasts', icon: PresentationChartLineIcon },
+  { name: 'Settings', href: '/dashboard/settings', icon: Cog6ToothIcon },
   { name: 'Exports', href: '/dashboard/exports', icon: ArrowRightOnRectangleIcon },
 ];
 

@@ -6,7 +6,7 @@ import { plusJakarta, spaceGrotesk } from '@/app/ui/fonts';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Planner · Kies week',
+  title: 'Planner · Choose week',
 };
 
 function currentISOWeek(): string {
@@ -42,16 +42,16 @@ export default async function PlannerWeekPage({ params }: { params: Promise<{ lo
           href="/dashboard/planner"
           className="rounded-full border border-white/20 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-white/80 transition hover:border-[#d2ff00] hover:text-white"
         >
-          Terug naar locaties
+          Back to locations
         </Link>
       </header>
 
       <section className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
         <div className="space-y-2">
           <p className={`${plusJakarta.className} text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>Week</p>
-          <h2 className={`${spaceGrotesk.className} text-2xl font-semibold`}>Kies de week voor je planning</h2>
+          <h2 className={`${spaceGrotesk.className} text-2xl font-semibold`}>Choose the week for your planning</h2>
           <p className="text-sm text-white/70">
-            Selecteer eerst voor welke week je wilt plannen. Daarna kies je de planningstijd/blok.
+            Select the week you want to plan. Then choose the planning time/block.
           </p>
         </div>
         <form
@@ -61,7 +61,7 @@ export default async function PlannerWeekPage({ params }: { params: Promise<{ lo
         >
           <label className="block text-sm text-white/80">
             <span className={`${plusJakarta.className} mb-2 block text-[0.65rem] uppercase tracking-[0.35em] text-white/60`}>
-              Weeknummer
+              Week number
             </span>
             <input
               type="week"
@@ -71,7 +71,7 @@ export default async function PlannerWeekPage({ params }: { params: Promise<{ lo
             />
           </label>
           <button type="submit" className="cta-primary w-full justify-center">
-            Verder naar planningstijden
+            Continue to planning times
           </button>
         </form>
       </section>
